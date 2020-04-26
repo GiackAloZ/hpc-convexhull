@@ -1,2 +1,8 @@
-src/
+src/*
 !src/*.c
+!src/*.cu
+!src/*.in
+!src/Makefile
+
+
+Relazione.odt
