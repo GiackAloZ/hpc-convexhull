@@ -132,17 +132,20 @@ int turn(const point_t p0, const point_t p1, const point_t p2)
     }
 }
 
-/* Compute the euclidean distance between two points (squared). */
-long long int square_dist(const point_t a, const point_t b){
-    long long int x = a.x - b.x;
-    long long int y = a.y - b.y;
-    return x*x + y*y;
+/** 
+ * Compute the euclidean distance between two points. 
+ */
+double dist(const point_t a, const point_t b){
+    return hypot(a.x - b.x, a.y - b.y);
 }
 
-/* Compute a partial hull with the Gift Wrapping algorithm,
-considering two points as start and end of the partial hull. 
-
-The inner loop of the Gift Wrapping algo is parallelized with a REDUCTION on the points using the TURN function. */
+/** 
+ * Compute a partial hull with the Gift Wrapping algorithm,
+ * considering two points as start and end of the partial hull. 
+ * 
+ * The inner loop of the Gift Wrapping algo is parallelized
+ * with a REDUCTION on the points using the TURN function.
+ */
 void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, int endIndex){
     const int n = pset->n;
     const point_t *p = pset->p;
@@ -183,7 +186,7 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
             int turning = turn(p[cur], p[next_priv[tid]], p[j]);
             /* Check if segment turns left */
             if (turning == LEFT ||  /* If collinear, take the furthers point from cur */
-                (turning == COLLINEAR && square_dist(p[cur], p[j]) > square_dist(p[cur], p[next_priv[tid]]))){
+                (turning == COLLINEAR && dist(p[cur], p[j]) > dist(p[cur], p[next_priv[tid]]))){
                 /* Update private next point for the current thread */
                 next_priv[tid] = j;
             }
@@ -194,7 +197,7 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
         for (i = 1; i < n_threads; i++){
             int turning = turn(p[cur], p[next], p[next_priv[i]]);
             if (turning == LEFT ||
-                (turning == COLLINEAR && square_dist(p[cur], p[next_priv[i]]) > square_dist(p[cur], p[next]))){
+                (turning == COLLINEAR && dist(p[cur], p[next_priv[i]]) > dist(p[cur], p[next]))){
                 next = next_priv[i];
             }
         }
@@ -209,6 +212,7 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
     free(next_priv);
 }
 
+/* Enumeration for indexes of partial sets. */
 enum {
     LEFTMOST = 0,
     HIGHEST = 1,
@@ -216,15 +220,29 @@ enum {
     LOWEST = 3
 };
 
-/* Divide a set of points in another set, considering points
-that turn left according to the line p1--->p2.
-
-The points p1 and p2 are stored at the beginning and at the end of the res_set. */
+/** 
+ * Divide a set of points in another set, considering points
+ * that turn left according to the line p1--->p2.
+ * 
+ * So, every point p that is like the figure:
+ * 
+ *   p                     p2
+ *    \                    /\
+ *     \                  /  \
+ *      p2      OR       p    \
+ *     /                       \
+ *    /                         \
+ *  p1                           p1  
+ * 
+ * Will be placed in the res_set.
+ * The points p1 and p2 are stored at the beginning and at the end of the res_set. 
+ */
 void divide_set(const points_t *pset, const int p1_index, const int p2_index, points_t *res_set) {
     int n = pset->n;
     point_t *p = pset->p;
     int i;
 
+    /* Set up res_set. */
     res_set->n = 1;
     res_set->p = (point_t*)malloc(n * sizeof(point_t)); assert(res_set->p);
     res_set->p[0] = p[p1_index];
@@ -238,6 +256,7 @@ void divide_set(const points_t *pset, const int p1_index, const int p2_index, po
     }
 
     res_set->p[res_set->n++] = p[p2_index];
+    /* Resize res_set. */
     res_set->p = (point_t*)realloc(res_set->p, res_set->n * sizeof(point_t)); assert(res_set->p);
 }
 
@@ -247,11 +266,15 @@ void divide_set(const points_t *pset, const int p1_index, const int p2_index, po
  * structure, that does not need to be initialized by the caller.
  * 
  * The algorithm divides the original set of points into four sets:
- *      - taking 4 points (highest, lowest, rightmos, leftmost) we divide the sets
- *        tracing lines from leftmost to highest, from highest to righmost (we take points above these lines);
+ *      - taking 4 "cardinal" points (highest, lowest, rightmos, leftmost) of the set, we divide the sets
+ *        tracing lines from leftmost to highest, from highest to righmost (we take points above these lines),
  *        from rightmost to lowest, from lowest to leftmost (we take points below these lines)
  *      - each hull is computed for every set
  *      - these 4 hulls are than concatenated into one final hull
+ * 
+ * The reduced sets allow the computation to be faster because the algorithm needs to iterate on
+ * a smaller number of points.
+ * Note that the 4 "cardinal" points are always part of the convex hull of pset.
  */
 void convex_hull(const points_t *pset, points_t *hull)
 {
@@ -259,9 +282,11 @@ void convex_hull(const points_t *pset, points_t *hull)
     const point_t *p = pset->p;
     int i, j;
     
-    /* Identify the 4 cardinal points in the set. */
+    /* Identify the 4 "cardinal" points in the set. */
     int cardinal[] = {0, 0, 0, 0};
     for (i = 1; i < n; i++) {
+        /* Break ties by taking the other coordinate and check for biggest/lowest values too. */
+
         /* Leftmost-down */
         if (p[i].x < p[cardinal[LEFTMOST]].x || (p[i].x == p[cardinal[LEFTMOST]].x && p[i].y < p[cardinal[LEFTMOST]].y)) {
             cardinal[LEFTMOST] = i;
@@ -280,7 +305,7 @@ void convex_hull(const points_t *pset, points_t *hull)
         }
     }
 
-    /* Create final hull structure. */
+    /* Initialize final hull structure. */
     hull->n = 0;
     hull->p = (point_t*)malloc(n * sizeof(point_t)); assert(hull->p);
 
@@ -288,17 +313,22 @@ void convex_hull(const points_t *pset, points_t *hull)
     for (j = 0; j < 4; j++) {
         points_t partial_set, partial_hull;
 
+        /* Divide the original set into partial one splitted
+           accordingly to the line of two cardinal points. */
         divide_set(pset, cardinal[j], cardinal[(j+1) % 4], &partial_set);
+        /* Compute the convex hull of the partial set. */
         partial_convex_hull(&partial_set, &partial_hull, 0, partial_set.n - 1);
-
+        /* Add the obtained hull to the final one. */
         for (i = 0; i < partial_hull.n; i++) {
             hull->p[hull->n++] = partial_hull.p[i];
         }
-        
         /* Free sets of points after use. */
         free_pointset(&partial_set);
         free_pointset(&partial_hull);
     }
+
+    /* Resize the hull with its actual size. */
+    hull->p = (point_t*)realloc(hull->p, hull->n * sizeof(point_t)); assert(hull->p);
 }
 
 /**
