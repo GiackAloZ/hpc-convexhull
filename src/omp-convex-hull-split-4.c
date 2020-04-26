@@ -207,85 +207,100 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
     free(next_priv);
 }
 
+enum {
+    LEFTMOST = 0,
+    HIGHEST = 1,
+    RIGHTMOST = 2,
+    LOWEST = 3
+};
+
+void divide_set(const points_t *pset, const int p1_index, const int p2_index, points_t *res_set) {
+    int n = pset->n;
+    point_t *p = pset->p;
+    int i;
+
+    res_set->n = 1;
+    res_set->p = (point_t*)malloc(n * sizeof(point_t)); assert(res_set->p);
+    res_set->p[0] = p[p1_index];
+
+    for (i = 0; i < n; i++) {
+        if (i == p1_index || i == p2_index) continue;
+        if (turn(p[p1_index], p[p2_index], p[i]) == LEFT) {
+            res_set->p[res_set->n++] = p[i];
+        }
+    }
+
+    res_set->p[res_set->n++] = p[p2_index];
+    res_set->p = (point_t*)realloc(res_set->p, res_set->n * sizeof(point_t)); assert(res_set->p);
+}
+
 /**
  * Compute the convex hull of all points in pset using the "Gift
  * Wrapping" algorithm. The vertices are stored in the hull data
  * structure, that does not need to be initialized by the caller.
+ * 
+ * The algorithm divides the original set of points into four sets:
+ *      - taking 4 points (highest, lowest, rightmos, leftmost) we divide the sets
+ *        tracing lines from leftmost to highest, from highest to righmost (we take points above these lines);
+ *        from rightmost to lowest, from lowest to leftmost (we take points below these lines)
+ *      - each hull is computed for every set
+ *      - these 4 hulls are than concatenated into one final hull
  */
 void convex_hull(const points_t *pset, points_t *hull)
 {
     const int n = pset->n;
     const point_t *p = pset->p;
-    int i;
-    int next, leftmost, rightmost;
+    int i, j, next, n_hull = 0;
     
-    hull->n = 0;
-    /* There can be at most n points in the convex hull. At the end of
-       this function we trim the excess space. */
-    hull->p = (point_t*)malloc(n * sizeof(*(hull->p))); assert(hull->p);
-    
-    /* Identify the leftmost-lower point p[leftmost] and rightmost-upper point p[rightmost]*/
-    leftmost = 0;
-    rightmost = 0;
-    for (i = 1; i<n; i++) {
-        if (p[i].x < p[leftmost].x || (p[i].x == p[leftmost].x && p[i].y < p[leftmost].y)) {
-            leftmost = i;
+    /* Identify the 4 cardinal points in the set. */
+    int cardinal[] = {0, 0, 0, 0};
+    for (i = 1; i < n; i++) {
+        /* Leftmost-down */
+        if (p[i].x < p[cardinal[LEFTMOST]].x || (p[i].x == p[cardinal[LEFTMOST]].x && p[i].y < p[cardinal[LEFTMOST]].y)) {
+            cardinal[LEFTMOST] = i;
         }
-        if (p[i].x > p[rightmost].x || (p[i].x == p[rightmost].x && p[i].y > p[rightmost].y)) {
-            rightmost = i;
-        }
-    }    
-
-    /* Divide the plane in half, taking points under or above the line between leftmost and rightmost points */
-    points_t upper_set, lower_set;
-    upper_set.p = (point_t*)malloc(n * sizeof(point_t)); assert(upper_set.p);
-    lower_set.p = (point_t*)malloc(n * sizeof(point_t)); assert(lower_set.p);
-
-    upper_set.p[0] = p[leftmost];
-    upper_set.n = 1;
-    lower_set.p[0] = p[rightmost];
-    lower_set.n = 1;
-
-    for (i = 0; i < n; i++) {
-        /* Special case */
-        if (i == leftmost || i == rightmost)
-            continue;
-        /* Point in upper set (turning LEFT so ABOVE the line) */
-        if (turn(p[leftmost], p[rightmost], p[i]) == LEFT) {
-            upper_set.p[upper_set.n++] = p[i];
-        } /* Point in lower set (turning RIGHT so UNDER the line) */
-        else if (turn(p[leftmost], p[rightmost], p[i]) == RIGHT) {
-            lower_set.p[lower_set.n++] = p[i];
+        /* Rightmost-up */
+        if (p[i].x > p[cardinal[RIGHTMOST]].x || (p[i].x == p[cardinal[RIGHTMOST]].x && p[i].y > p[cardinal[RIGHTMOST]].y)) {
+            cardinal[RIGHTMOST] = i;
+        } 
+        /* Highest-left */
+        if (p[i].y > p[cardinal[HIGHEST]].y || (p[i].y == p[cardinal[HIGHEST]].y && p[i].x < p[cardinal[HIGHEST]].x)) {
+            cardinal[HIGHEST] = i;
+        } 
+        /* Lowest-right */
+        if (p[i].y < p[cardinal[LOWEST]].y || (p[i].y == p[cardinal[LOWEST]].y && p[i].x > p[cardinal[LOWEST]].x)) {
+            cardinal[LOWEST] = i;
         }
     }
-    
-    upper_set.p[upper_set.n++] = p[rightmost];
-    lower_set.p[lower_set.n++] = p[leftmost];
-    
-    /* Realloc partial sets with appropriate sizes. */ 
-    upper_set.p = (point_t*)realloc(upper_set.p, upper_set.n * sizeof(point_t)); assert(upper_set.p);
-    lower_set.p = (point_t*)realloc(lower_set.p, lower_set.n * sizeof(point_t)); assert(lower_set.p);
 
-    /* Calculate upper and lower hulls.*/
-    points_t lower_hull, upper_hull;
-    partial_convex_hull(&upper_set, &upper_hull, 0, upper_set.n - 1);
-    partial_convex_hull(&lower_set, &lower_hull, 0, lower_set.n - 1);
+    /* Divide the plane in 4 parts. */
+    points_t partial_sets[4];
+    divide_set(pset, cardinal[LEFTMOST], cardinal[HIGHEST], &partial_sets[LEFTMOST]);
+    divide_set(pset, cardinal[HIGHEST], cardinal[RIGHTMOST], &partial_sets[HIGHEST]);
+    divide_set(pset, cardinal[RIGHTMOST], cardinal[LOWEST], &partial_sets[RIGHTMOST]);
+    divide_set(pset, cardinal[LOWEST], cardinal[LEFTMOST], &partial_sets[LOWEST]);
+
+    /* Calculate every partial hull.*/
+    points_t partial_hulls[4];
+    for (j = 0; j < 4; j++) {
+        partial_convex_hull(&partial_sets[j], &partial_hulls[j], 0, partial_sets[j].n - 1);
+    }
     
     /* Merge hulls. */
-    hull->n = upper_hull.n + lower_hull.n;
-    hull->p = (point_t*)realloc(hull->p, hull->n * sizeof(point_t)); assert(hull->p);
+    for (j = 0; j < 4; j++) {
+        n_hull += partial_hulls[j].n;
+    }
+    hull->n = n_hull;
+    hull->p = (point_t*)malloc(n_hull * sizeof(point_t)); assert(hull->p);
 
     next = 0;
-    for (i = 0; i < upper_hull.n; i++) {
-        hull->p[next++] = upper_hull.p[i];
+    for (j = 0; j < 4; j++) {
+        for (i = 0; i < partial_hulls[j].n; i++) {
+            hull->p[next++] = partial_hulls[j].p[i];
+        }
+        free_pointset(&partial_sets[j]);
+        free_pointset(&partial_hulls[j]);
     }
-    for (i = 0; i < lower_hull.n; i++) {
-        hull->p[next++] = lower_hull.p[i];
-    }
-
-    /* Free partial hulls. */
-    free_pointset(&upper_hull);
-    free_pointset(&lower_hull);
 }
 
 /**
