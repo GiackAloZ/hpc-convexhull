@@ -166,7 +166,7 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
         
         A batch of threads is created before the main loop and kept through the duration of it.
     */
-#pragma omp parallel default(none) firstprivate(n) private(i) shared(n_threads) shared(leftmost) shared(hull) shared(cur) shared(p) shared(next_priv) shared(next)
+#pragma omp parallel default(none) firstprivate(n) private(i) shared(n_threads) shared(endIndex) shared(hull) shared(cur) shared(p) shared(next_priv) shared(next)
     {
         int tid = omp_get_thread_num();
 

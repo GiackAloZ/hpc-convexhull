@@ -224,6 +224,9 @@ void convex_hull(const points_t *pset, points_t *hull)
     int i, j;
     int cur, next, leftmost;
 
+    int n_threads = omp_get_max_threads();
+    int next_priv[n_threads];
+
     hull->n = 0;
     /* There can be at most n points in the convex hull. At the end of
        this function we trim the excess space. */
@@ -237,60 +240,67 @@ void convex_hull(const points_t *pset, points_t *hull)
         }
     }
     cur = leftmost;
-    
-    /* Main loop of the Gift Wrapping algorithm. This is where most of
-       the time is spent; therefore, this is the block of code that
-       must be parallelized. */
-    do {
-        /* Add the current vertex to the hull */
-        assert(hull->n < n);
-        hull->p[hull->n] = p[cur];
-        hull->n++;
 
-        int n_threads = omp_get_max_threads();
-        int next_priv[n_threads];
+    /* 
+        Main loop of the Gift Wrapping algorithm. This is where most of
+        the time is spent; therefore, this is the block of code that
+        must be parallelized. 
         
-        /* Search for the next vertex */
-        for(i = 0; i < n_threads; i++)
-            next_priv[i] = (cur + 1) % n;
+        A batch of threads is created before the main loop and kept through the duration of it.
+    */
 
-#pragma omp parallel for private(j) shared(next_priv) shared(cur) shared(p)
-        for (j=0; j<n; j++) {
-            int index = omp_get_thread_num();
-            if (LEFT == turn(p[cur], p[next_priv[index]], p[j])) {
-                next_priv[index] = j;
+#pragma omp parallel default(none) firstprivate(n) private(i) shared(n_threads) shared(leftmost) shared(hull) shared(cur) shared(p) shared(next_priv) shared(next)
+    {
+        int tid = omp_get_thread_num();
+
+        do {
+#pragma omp single
+            {
+                /* Add the current vertex to the hull */
+                assert(hull->n < n);
+                hull->p[hull->n] = p[cur];
+                hull->n++;
             }
-        }
+            
+            /* Search for the next vertex */
+            /* Initialize next_priv for each thread as the next point in the set */
+            next_priv[tid] = (cur + 1) % n;
+#pragma omp barrier
 
-        next = next_priv[0];
-        
-        // fprintf(stderr, "# iter = %d\n", hull->n);
-
-        int jump = 2;
-        int red_procs = (n_threads + 1) / 2;
-        while (1) {
-#pragma omp parallel for private(i) shared(red_procs) shared(next_priv) shared(jump) shared(p) shared(n_threads)
-            for (i = 0; i < red_procs; i++) {
-                int my_id = i * jump;
-                int next_id = my_id + jump / 2;
-                if (next_id < n_threads && LEFT == turn(p[cur], p[next_priv[my_id]], p[next_priv[next_id]])) {
-                    next_priv[my_id] = next_priv[next_id];
+            /* The actual parallel-heavy computation */
+#pragma omp for private(j)
+            for (j=0; j<n; j++) {
+                /* Check if segment turns left */
+                if (LEFT == turn(p[cur], p[next_priv[tid]], p[j])) {
+                    next_priv[tid] = j;
                 }
             }
 
-            // fprintf(stderr, "jump = %d\n", jump);
-            jump *= 2;
+            /* Parallel logarithmic tree reduction */
+            int red_procs = (n_threads + 1) / 2;
+            int rem_red = n_threads;
 
-            if (red_procs == 1)
-                break;
-            red_procs = (red_procs + 1) / 2;
-        }
+            while(rem_red > 1) {
+                int next_index = tid + red_procs;
+                if (tid < red_procs && next_index < rem_red) {
+                    if (LEFT == turn(p[cur], p[next_priv[tid]], p[next_priv[next_index]])) {
+                        next_priv[tid] = next_priv[next_index];
+                    }
+                }
+#pragma omp barrier
+                red_procs = (red_procs + 1) / 2;
+                rem_red = (rem_red + 1) / 2;
+            }
 
-        next = next_priv[0];
-
-        assert(cur != next);
-        cur = next;
-    } while (cur != leftmost);
+            /* At the end of the reduction, the result is stored in next_priv[0] */
+#pragma omp single
+            {
+                next = next_priv[0];
+                assert(cur != next);
+                cur = next;
+            }
+        } while (cur != leftmost);
+    }
     
     /* Trim the excess space in the convex hull array */
     hull->p = (point_t*)realloc(hull->p, (hull->n) * sizeof(*(hull->p)));

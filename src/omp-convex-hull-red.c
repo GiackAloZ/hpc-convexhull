@@ -251,27 +251,38 @@ void convex_hull(const points_t *pset, points_t *hull)
         }
     }
     cur = leftmost;
-    
-    /* Main loop of the Gift Wrapping algorithm. This is where most of
-       the time is spent; therefore, this is the block of code that
-       must be parallelized. */
-    do {
-        /* Add the current vertex to the hull */
-        assert(hull->n < n);
-        hull->p[hull->n] = p[cur];
-        hull->n++;
 
-#pragma omp declare reduction (rtm:int:omp_out = cmp_min_turn(omp_out, omp_in)) initializer(omp_priv = init_red())    
-        next = init_red();
+#pragma omp declare reduction (rtm:int:omp_out = cmp_min_turn(omp_out, omp_in)) initializer(omp_priv = init_red()) 
 
-#pragma omp parallel for reduction (rtm:next)
-        for (j=0; j<n; j++) {
-            next = cmp_min_turn(next, j);
-        }
 
-        assert(cur != next);
-        cur = next;
-    } while (cur != leftmost);
+#pragma omp parallel default(none) firstprivate(n) shared(leftmost) shared(hull) shared(cur) shared(p) shared(next)
+    {
+        /* Main loop of the Gift Wrapping algorithm. This is where most of
+        the time is spent; therefore, this is the block of code that
+        must be parallelized. */
+        do {
+#pragma omp single
+            {
+                /* Add the current vertex to the hull */
+                assert(hull->n < n);
+                hull->p[hull->n] = p[cur];
+                hull->n++;
+
+                next = init_red();
+            }
+
+#pragma omp parallel for private(j) reduction (rtm:next)
+            for (j=0; j<n; j++) {
+                next = cmp_min_turn(next, j);
+            }
+
+#pragma omp single
+            {
+                assert(cur != next);
+                cur = next;
+            }
+        } while (cur != leftmost);
+    }
     
     /* Trim the excess space in the convex hull array */
     hull->p = (point_t*)realloc(hull->p, (hull->n) * sizeof(*(hull->p)));
