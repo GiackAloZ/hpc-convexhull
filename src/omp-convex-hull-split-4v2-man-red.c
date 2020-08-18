@@ -193,7 +193,7 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
         }
 
         /* Reduce all next_priv into one single next using a logarithmic tree reduction. */
-        #pragma omp parallel default(none) shared(n_threads) shared(next_priv) shared(cur) shared(p) num_threads(n_threads)
+        #pragma omp parallel default(none) shared(n_threads) shared(next_priv) shared(cur) shared(p)
         {
             int tid = omp_get_thread_num();
             int red_procs = (n_threads + 1) / 2;
