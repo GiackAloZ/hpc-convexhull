@@ -1,5 +1,6 @@
 src/*
 !src/*.c
+!src/*.h
 !src/*.cu
 !src/*.in
 !src/Makefile
