@@ -159,47 +159,55 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
 
     cur = startIndex;
  
-    /* Main loop of the Gift Wrapping algorithm. This is where most of
-       the time is spent; therefore, this is the block of code that
-       must be parallelized. */
-    do {
-        /* Add the current vertex to the hull */
-        assert(hull->n < n);
-        hull->p[hull->n] = p[cur];
-        hull->n++;
+   /* 
+        Main loop of the Gift Wrapping algorithm. This is where most of
+        the time is spent; therefore, this is the block of code that
+        must be parallelized. 
         
-        /* Search for the next vertex */
-        /* Initialize next_priv for each thread as the next point in the set:
-        it will be actually any other point that is not cur */
-        for(i = 0; i < n_threads; i++)
-            next_priv[i] = (cur + 1) % n;   /* Modulo is added to prevent access out of memory */
+        A batch of threads is created before the main loop and kept through the duration of it.
+    */
+#pragma omp parallel default(none) firstprivate(n) private(i) shared(n_threads) shared(leftmost) shared(hull) shared(cur) shared(p) shared(next_priv) shared(next)
+    {
+        int tid = omp_get_thread_num();
 
-        /* Parallelizing inner loop with a manual reduction */
-#pragma omp parallel for default(none) private(j) shared(next_priv) shared(cur) shared(p)
-        for (j=0; j<n; j++) {
-            int index = omp_get_thread_num();
-            int turning = turn(p[cur], p[next_priv[index]], p[j]);
-            /* Check if segment turns left */
-            if (turning == LEFT ||  /* If collinear, take the furthers point from cur */
-                (turning == COLLINEAR && square_dist(p[cur], p[j]) > square_dist(p[cur], p[next_priv[index]]))){
-                /* Update private next point for the current thread */
-                next_priv[index] = j;
+        do {
+#pragma omp single
+            {
+                /* Add the current vertex to the hull */
+                assert(hull->n < n);
+                hull->p[hull->n] = p[cur];
+                hull->n++;
             }
-        }
+            
+            /* Search for the next vertex */
+            /* Initialize next_priv for each thread as the next point in the set */
+            next_priv[tid] = (cur + 1) % n;
+#pragma omp barrier
 
-        /* Reduce all next_priv into one single next */
-        next = next_priv[0];
-        for (i = 1; i < n_threads; i++){
-            int turning = turn(p[cur], p[next], p[next_priv[i]]);
-            if (turning == LEFT ||
-                (turning == COLLINEAR && square_dist(p[cur], p[next_priv[i]]) > square_dist(p[cur], p[next]))){
-                next = next_priv[i];
+            /* The actual parallel-heavy computation */
+#pragma omp for private(j)
+            for (j=0; j<n; j++) {
+                /* Check if segment turns left */
+                if (LEFT == turn(p[cur], p[next_priv[tid]], p[j])) {
+                    next_priv[tid] = j;
+                }
             }
-        }
 
-        assert(cur != next);
-        cur = next;
-    } while (cur != endIndex);
+            /* Sequential reduction */
+#pragma omp single
+            {
+                next = next_priv[0];
+                for (i = 1; i < n_threads; i++){
+                    if (LEFT == turn(p[cur], p[next], p[next_priv[i]])){
+                        next = next_priv[i];
+                    }
+                }
+
+                assert(cur != next);
+                cur = next;
+            }
+        } while (cur != endIndex);
+    }
     
     /* Trim the excess space in the convex hull array */
     hull->p = (point_t*)realloc(hull->p, (hull->n) * sizeof(*(hull->p)));
