@@ -193,7 +193,7 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
         }
 
         /* Reduce all next_priv into one single next using a logarithmic tree reduction. */
-        #pragma omp parallel default(none) shared(n_threads) shared(next_priv) shared(cur) shared(p) num_threads(n_threads)
+#pragma omp parallel default(none) shared(n_threads) shared(next_priv) shared(cur) shared(p) num_threads(n_threads)
         {
             int tid = omp_get_thread_num();
             int red_procs = (n_threads + 1) / 2;
@@ -201,9 +201,9 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
 
             while(rem_red > 1) {
                 int other_idx = tid + red_procs;    /* Other index of the reduction step pairing */
-                int turning = turn(p[cur], p[next_priv[tid]], p[next_priv[other_idx]]);
                 if (tid < red_procs && other_idx < rem_red) {   /* Check if this tid is still reducing and the other index has
                                                                    yet to be reduced */
+                    int turning = turn(p[cur], p[next_priv[tid]], p[next_priv[other_idx]]);
                     if (turning == LEFT ||
                         (turning == COLLINEAR && dist(p[cur], p[next_priv[other_idx]]) > dist(p[cur], p[next_priv[tid]]))){
                         next_priv[tid] = next_priv[other_idx];
