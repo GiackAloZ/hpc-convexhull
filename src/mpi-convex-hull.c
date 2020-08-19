@@ -282,30 +282,17 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 
     MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    // int *sendcnts = (int*)malloc(n_procs * sizeof(int));
-    // int *displs = (int*)malloc(n_procs * sizeof(int));
-
-    // int cnt = 0;
-    // for (i=0; i<n_procs; i++) {
-    //     displs[i] = cnt;
-    //     cnt += n / n_procs;
-    //     sendcnts[i] = n / n_procs;
-    // }
-    // for(i=0; i<n % n_procs; i++){
-    //     displs[i+1]++;
-    //     sendcnts[i]++;
-    // }
+    int local_n = n / n_procs;
 
     point_t local_cur, local_next;
-    point_t *local_p = (point_t*)malloc(n / n_procs + 1 * sizeof(point_t));
+    point_t *local_p = (point_t*)malloc(local_n * sizeof(point_t));
 
     if (rank == 0) {
         local_cur = p[leftmost];
     }
     
     MPI_Bcast(&local_cur, 1, mpi_point_t, 0, MPI_COMM_WORLD);
-    MPI_Scatter(p, n / n_procs, mpi_point_t, local_p, n / n_procs, mpi_point_t, 0, MPI_COMM_WORLD);
-    //MPI_Scatterv(p, sendcnts, displs, mpi_point_t, local_p, n / n_procs + 1, mpi_point_t, 0, MPI_COMM_WORLD);
+    MPI_Scatter(p, local_n, mpi_point_t, local_p, local_n, mpi_point_t, 0, MPI_COMM_WORLD);
 
     point_t local_leftmost = local_cur;
  
@@ -325,7 +312,7 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
             local_next = local_p[1];
         }
 
-        for (j=0; j<n/n_procs; j++) {
+        for (j=0; j<local_n; j++) {
             /* Check if segment turns left */
             int turning = turn(local_cur, local_next, local_p[j]);
             if (turning == LEFT ||
@@ -343,8 +330,6 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
     } while (!(local_cur.x == local_leftmost.x && local_cur.y == local_leftmost.y));
 
     free(local_p);
-    // free(sendcnts);
-    // free(displs);
 
     if (rank == 0) {
         /* Trim the excess space in the convex hull array */
