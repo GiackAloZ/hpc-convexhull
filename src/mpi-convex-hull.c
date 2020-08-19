@@ -150,6 +150,13 @@ void write_hull( FILE *f, const points_t *hull )
     fprintf(f, "%f %f\n", hull->p[0].x, hull->p[0].y);    
 }
 
+/** 
+ * Compute the euclidean distance between two points. 
+ */
+double dist(const point_t a, const point_t b){
+    return hypot(a.x - b.x, a.y - b.y);
+}
+
 /**
  * Return LEFT, RIGHT or COLLINEAR depending on the shape
  * of the vectors p0p1 and p1p2
@@ -197,7 +204,9 @@ void turn_reduce(void *in, void *inout, int *len, MPI_Datatype *dptr) {
 
     for (i=0; i<*len; i++) {
         reduce_point_t out = in_conv[i];
-        if (LEFT == turn(out.cur, inout_conv[i].next, out.next)) {
+        int turning = turn(out.cur, inout_conv[i].next, out.next);
+        if (turning == LEFT ||
+            (turning == COLLINEAR && dist(out.cur, out.next) > dist(out.cur, inout_conv[i].next))) {
             inout_conv[i] = out;
         }
     }
@@ -305,7 +314,9 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 
         for (j=0; j<local_n; j++) {
             /* Check if segment turns left */
-            if (LEFT == turn(local_cur, local_next, local_p[j])) {
+            int turning = turn(local_cur, local_next, local_p[j]);
+            if (turning == LEFT ||
+                (turning == COLLINEAR && dist(local_cur, local_p[j]) > dist(local_cur, local_next))) {
                 local_next = local_p[j];
             }
         }
