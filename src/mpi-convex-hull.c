@@ -343,8 +343,8 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
     } while (!(local_cur.x == local_leftmost.x && local_cur.y == local_leftmost.y));
 
     free(local_p);
-    free(sendcnts);
-    free(displs);
+    // free(sendcnts);
+    // free(displs);
 
     if (rank == 0) {
         /* Trim the excess space in the convex hull array */
