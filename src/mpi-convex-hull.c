@@ -285,7 +285,7 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
     MPI_Bcast(&local_cur, 1, mpi_point_t, 0, MPI_COMM_WORLD);
     MPI_Scatter(p, local_n, mpi_point_t, local_p, local_n, mpi_point_t, 0, MPI_COMM_WORLD);
 
-    printf("%d %d %d", n, n_procs, local_n);
+    printf("%d %d %d\n", n, n_procs, local_n);
 
     point_t local_leftmost = local_cur;
  
@@ -302,7 +302,7 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 
         local_next = local_p[0];
         if (local_cur.x == local_next.x && local_cur.y == local_next.y) {
-            local_next = local_p[1];
+            local_next = local_p[20];
         }
 
         for (j=0; j<local_n; j++) {
@@ -312,12 +312,16 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
             }
         }
 
+        printf("local_next = %f %f\n", local_next.x, local_next.y);
+
         reduce_point_t cur_and_next = {local_cur, local_next};
         reduce_point_t final_cur_and_next;
 
         MPI_Allreduce(&cur_and_next, &final_cur_and_next, 1, mpi_reduce_point_t, mpi_turn_reduce, MPI_COMM_WORLD);
 
         local_cur = final_cur_and_next.next;
+
+        printf("local_cur = %f %f\n", local_cur.x, local_cur.y);
     } while (local_cur.x != local_leftmost.x && local_cur.y != local_leftmost.y);
 
     free(local_p);
