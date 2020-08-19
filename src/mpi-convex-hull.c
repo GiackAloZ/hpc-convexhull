@@ -323,7 +323,12 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 
         printf("local_cur = %f %f\n", local_cur.x, local_cur.y);
         printf("local_leftmost = %f %f\n", local_leftmost.x, local_leftmost.y);
-    } while (local_cur.x != local_leftmost.x && local_cur.y != local_leftmost.y);
+
+        if (local_cur.x == local_leftmost.x && local_cur.y == local_leftmost.y) {
+            printf("done!\n");
+            break;
+        }
+    } while (1);
 
     free(local_p);
 
