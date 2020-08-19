@@ -328,7 +328,7 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
             local_next = local_p[1];
         }
 
-        for (j=0; j<local_n; j++) {
+        for (j=0; j<sendcounts[rank]; j++) {
             /* Check if segment turns left */
             int turning = turn(local_cur, local_next, local_p[j]);
             if (turning == LEFT ||
