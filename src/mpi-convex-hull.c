@@ -282,19 +282,19 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 
     MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    int *sendcnts = (int*)malloc(n_procs * sizeof(int));
-    int *displs = (int*)malloc(n_procs * sizeof(int));
+    // int *sendcnts = (int*)malloc(n_procs * sizeof(int));
+    // int *displs = (int*)malloc(n_procs * sizeof(int));
 
-    int cnt = 0;
-    for (i=0; i<n_procs; i++) {
-        displs[i] = cnt;
-        cnt += n / n_procs;
-        sendcnts[i] = n / n_procs;
-    }
-    for(i=0; i<n % n_procs; i++){
-        displs[i+1]++;
-        sendcnts[i]++;
-    }
+    // int cnt = 0;
+    // for (i=0; i<n_procs; i++) {
+    //     displs[i] = cnt;
+    //     cnt += n / n_procs;
+    //     sendcnts[i] = n / n_procs;
+    // }
+    // for(i=0; i<n % n_procs; i++){
+    //     displs[i+1]++;
+    //     sendcnts[i]++;
+    // }
 
     point_t local_cur, local_next;
     point_t *local_p = (point_t*)malloc(n / n_procs + 1 * sizeof(point_t));
