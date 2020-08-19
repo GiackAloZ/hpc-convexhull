@@ -309,7 +309,7 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 
         local_next = local_p[0];
         if (local_cur.x == local_next.x && local_cur.y == local_next.y) {
-            local_next = local_p[20];
+            local_next = local_p[1];
         }
 
         for (j=0; j<local_n; j++) {
