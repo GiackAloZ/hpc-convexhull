@@ -289,7 +289,7 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 
     int cnt = 0;
     for (i=0; i<n_procs; i++) {
-        int cntnow = n / n_procs + (i < n%n_procs) ? 1 : 0;
+        int cntnow = n / n_procs + ((i < n%n_procs) ? 1 : 0);
         sendcounts[i] = cntnow;
         displs[i] = cnt;
         cnt += cntnow;
