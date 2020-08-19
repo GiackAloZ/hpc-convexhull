@@ -304,7 +304,8 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
     }
     
     MPI_Bcast(&local_cur, 1, mpi_point_t, 0, MPI_COMM_WORLD);
-    MPI_Scatterv(p, sendcnts, displs, mpi_point_t, local_p, n / n_procs + 1, mpi_point_t, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(p, n / n_procs, mpi_point_t, local_p, n / n_procs, mpi_point_t, 0, MPI_COMM_WORLD);
+    //MPI_Scatterv(p, sendcnts, displs, mpi_point_t, local_p, n / n_procs + 1, mpi_point_t, 0, MPI_COMM_WORLD);
 
     point_t local_leftmost = local_cur;
  
@@ -324,7 +325,7 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
             local_next = local_p[1];
         }
 
-        for (j=0; j<sendcnts[rank]; j++) {
+        for (j=0; j<n/n_procs; j++) {
             /* Check if segment turns left */
             int turning = turn(local_cur, local_next, local_p[j]);
             if (turning == LEFT ||
