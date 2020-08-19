@@ -192,9 +192,12 @@ int turn(const point_t p0, const point_t p1, const point_t p2)
 void turn_reduce(void *in, void *inout, int *len, MPI_Datatype *dptr) {
     int i;
 
+    reduce_point_t *in_conv = (reduce_point_t*)in;
+    reduce_point_t *inout_conv = (reduce_point_t*)inout;
+
     for (i=0; i<*len; i++) {
-        reduce_point_t out = {((reduce_point_t*)in[i]).cur, ((reduce_point_t*)in[i]).next};
-        if (LEFT == turn(out.cur, ((reduce_point_t*)inout[i]).next, out.next)) {
+        reduce_point_t out = in_conv[i];
+        if (LEFT == turn(out.cur, inout_conv[i].next, out.next)) {
             inout[i] = out;
         }
     }
