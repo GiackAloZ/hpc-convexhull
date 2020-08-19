@@ -307,7 +307,8 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
     }
     
     MPI_Bcast(&local_cur, 1, mpi_point_t, 0, MPI_COMM_WORLD);
-    MPI_Scatter(p, local_n, mpi_point_t, local_p, local_n, mpi_point_t, 0, MPI_COMM_WORLD);
+    //MPI_Scatter(p, local_n, mpi_point_t, local_p, local_n, mpi_point_t, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(p, sendcounts, displs, mpi_point_t, local_p, local_n + 1, mpi_point_t, 0, MPI_COMM_WORLD);
 
     point_t local_leftmost = local_cur;
  
