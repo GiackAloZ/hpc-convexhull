@@ -284,6 +284,9 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 
     int local_n = n / n_procs;
 
+    int *sendcounts = (int*)malloc(n_procs * sizeof(int));
+    int *displs = (int*)malloc(n_procs * sizeof(int));
+
     point_t local_cur, local_next;
     point_t *local_p = (point_t*)malloc(local_n * sizeof(point_t));
 
