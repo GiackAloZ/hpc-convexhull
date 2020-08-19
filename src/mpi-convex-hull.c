@@ -285,6 +285,8 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
     MPI_Bcast(&local_cur, 1, mpi_point_t, 0, MPI_COMM_WORLD);
     MPI_Scatter(p, local_n, mpi_point_t, local_p, local_n, mpi_point_t, 0, MPI_COMM_WORLD);
 
+    printf("%d %d %d", n, n_procs, local_n);
+
     point_t local_leftmost = local_cur;
  
     /* Main loop of the Gift Wrapping algorithm. This is where most of
