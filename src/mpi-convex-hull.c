@@ -198,7 +198,7 @@ void turn_reduce(void *in, void *inout, int *len, MPI_Datatype *dptr) {
     for (i=0; i<*len; i++) {
         reduce_point_t out = in_conv[i];
         if (LEFT == turn(out.cur, inout_conv[i].next, out.next)) {
-            inout[i] = out;
+            inout_conv[i] = out;
         }
     }
 }
