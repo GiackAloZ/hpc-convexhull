@@ -191,7 +191,7 @@ int turn(const point_t p0, const point_t p1, const point_t p2)
 
 void turn_reduce(reduce_point_t *in, reduce_point_t *inout, int *len, MPI_Datatype *dptr) {
     int i;
-    for (i=0; i<*len, i++) {
+    for (i=0; i<*len; i++) {
         reduce_point_t out = {in[i].cur, in[i].next};
         if (LEFT == turn(out.cur, inout[i].next, out.next)) {
             inout[i] = out;
@@ -236,8 +236,7 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 {
     int n, i, j;
     point_t *p = pset->p;
-    int i, j;
-    int cur, leftmost;
+    int leftmost;
 
     MPI_Datatype mpi_point_t;
     MPI_Type_contiguous(2, MPI_DOUBLE, &mpi_point_t);
@@ -248,7 +247,7 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
     MPI_Type_commit(&mpi_reduce_point_t);
 
     MPI_Op mpi_turn_reduce;
-    MPI_Op_create(turn_reduce, true, &mpi_turn_reduce);
+    MPI_Op_create(turn_reduce, 1, &mpi_turn_reduce);
 
     if (rank == 0) {
         n = pset->n;
@@ -266,7 +265,6 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
                 leftmost = i;
             }
         }
-        cur = leftmost;
     }
 
     MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -311,7 +309,7 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
         reduce_point_t cur_and_next = {local_cur, local_next};
         reduce_point_t final_cur_and_next;
 
-        MPI_Allreduce(&cur_and_next, &final_cur_and_next, 1, mpi_reduce_point_t, mpi_turn_reduce, 0, MPI_COMM_WORLD);
+        MPI_Allreduce(&cur_and_next, &final_cur_and_next, 1, mpi_reduce_point_t, mpi_turn_reduce, MPI_COMM_WORLD);
 
         local_cur = final_cur_and_next.next;
     } while (local_cur.x != local_leftmost.x && local_cur.y != local_leftmost.y);
