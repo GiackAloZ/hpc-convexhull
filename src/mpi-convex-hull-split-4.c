@@ -303,38 +303,34 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
         /* There can be at most n points in the convex hull. At the end of
         this function we trim the excess space. */
         hull->p = (point_t*)malloc(n * sizeof(*(hull->p))); assert(hull->p);
-
-        printf("Root proc = %d\n", n);
     }
 
     MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    printf("%d\n", n);
+    int local_n = n / n_procs;
 
-    // int local_n = n / n_procs;
+    int *sendcounts = (int*)malloc(n_procs * sizeof(int));
+    int *displs = (int*)malloc(n_procs * sizeof(int));
 
-    // int *sendcounts = (int*)malloc(n_procs * sizeof(int));
-    // int *displs = (int*)malloc(n_procs * sizeof(int));
+    int cnt = 0;
+    for (i=0; i<n_procs; i++) {
+        int cntnow = n / n_procs + ((i < n%n_procs) ? 1 : 0);
+        sendcounts[i] = cntnow;
+        displs[i] = cnt;
+        cnt += cntnow;
+    }
 
-    // int cnt = 0;
-    // for (i=0; i<n_procs; i++) {
-    //     int cntnow = n / n_procs + ((i < n%n_procs) ? 1 : 0);
-    //     sendcounts[i] = cntnow;
-    //     displs[i] = cnt;
-    //     cnt += cntnow;
-    // }
+    point_t local_cur, local_next, local_end;
+    point_t *local_p = (point_t*)malloc(local_n * sizeof(point_t));
 
-    // point_t local_cur, local_next, local_end;
-    // point_t *local_p = (point_t*)malloc(local_n * sizeof(point_t));
-
-    // if (rank == 0) {
-    //     local_cur = p[startIndex];
-    //     local_end = p[endIndex];
-    // }
+    if (rank == 0) {
+        local_cur = p[startIndex];
+        local_end = p[endIndex];
+    }
     
-    // MPI_Bcast(&local_cur, 1, mpi_point_t, 0, MPI_COMM_WORLD);
-    // MPI_Bcast(&local_end, 1, mpi_point_t, 0, MPI_COMM_WORLD);
-    // MPI_Scatterv(p, sendcounts, displs, mpi_point_t, local_p, local_n + 1, mpi_point_t, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&local_cur, 1, mpi_point_t, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&local_end, 1, mpi_point_t, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(p, sendcounts, displs, mpi_point_t, local_p, local_n + 1, mpi_point_t, 0, MPI_COMM_WORLD);
  
     /* Main loop of the Gift Wrapping algorithm. This is where most of
        the time is spent; therefore, this is the block of code that
