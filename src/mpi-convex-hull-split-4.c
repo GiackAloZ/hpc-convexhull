@@ -281,8 +281,6 @@ void divide_set(const points_t *pset, const int p1_index, const int p2_index, po
  */
 void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, int endIndex, int rank, int n_procs)
 {
-    printf("%d\n", rank);
-
     int n, i, j;
     point_t *p = pset->p;
 
@@ -307,7 +305,9 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
         hull->p = (point_t*)malloc(n * sizeof(*(hull->p))); assert(hull->p);
     }
 
-    // MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    printf("%d\n", n);
 
     // int local_n = n / n_procs;
 
@@ -412,8 +412,6 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
         divide_set(pset, cardinal[RIGHTMOST], cardinal[LOWEST], &partial_sets[RIGHTMOST]);
         divide_set(pset, cardinal[LOWEST], cardinal[LEFTMOST], &partial_sets[LOWEST]);
     }
-
-    printf("hey\n");
 
     /* Calculate every partial hull */
     points_t partial_hulls[4];
