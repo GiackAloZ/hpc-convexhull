@@ -374,7 +374,7 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
 
 void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 {
-    int n, rank, n_procs, i, j, next, n_hull = 0;
+    int n, i, j, next, n_hull = 0;
     point_t *p;
 
     points_t partial_sets[4];
