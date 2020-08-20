@@ -415,10 +415,10 @@ void convex_hull(const points_t *pset, points_t *hull)
     }
 
     /* Calculate every partial hull */
-    // points_t partial_hulls[4];
-    // for (j = 0; j < 4; j++) {
-    //     partial_convex_hull(&partial_sets[j], &partial_hulls[j], 0, partial_sets[j].n - 1, rank, n_procs);
-    // }
+    points_t partial_hulls[4];
+    for (j = 0; j < 4; j++) {
+        partial_convex_hull(&partial_sets[j], &partial_hulls[j], 0, partial_sets[j].n - 1, rank, n_procs);
+    }
 
     // /* Merge hulls */
     // if (rank == 0) {
