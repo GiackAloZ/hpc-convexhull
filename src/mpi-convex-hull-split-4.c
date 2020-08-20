@@ -282,7 +282,7 @@ void divide_set(const points_t *pset, const int p1_index, const int p2_index, po
 void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, int endIndex, int rank, int n_procs)
 {
     int n, i, j;
-    point_t *p;
+    point_t *p = pset->p;
 
     MPI_Datatype mpi_point_t;
     MPI_Type_contiguous(2, MPI_DOUBLE, &mpi_point_t);
