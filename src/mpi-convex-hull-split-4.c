@@ -307,6 +307,8 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
 
     MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
+    printf("%d\n", n);
+
     int local_n = n / n_procs;
 
     int *sendcounts = (int*)malloc(n_procs * sizeof(int));
