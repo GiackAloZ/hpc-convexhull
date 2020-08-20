@@ -319,6 +319,11 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
         displs[i] = cnt;
         cnt += cntnow;
 
+        if (sendcounts[i] == 0) {
+            sendcounts[i] = 1;
+            displs[i] = 0;
+        }
+
         printf("Proc %d send %d displ %d\n", rank, sendcounts[i], displs[i]);
     }
 
@@ -338,33 +343,29 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
     /* Main loop of the Gift Wrapping algorithm. This is where most of
        the time is spent; therefore, this is the block of code that
        must be parallelized. */
-    // do {
-    //     if (rank == 0) {
-    //         /* Add the current vertex to the hull */
-    //         assert(hull->n < n);
-    //         hull->p[hull->n] = local_cur;
-    //         hull->n++;
-    //     }
+    do {
+        if (rank == 0) {
+            /* Add the current vertex to the hull */
+            assert(hull->n < n);
+            hull->p[hull->n] = local_cur;
+            hull->n++;
+        }
 
-    //     local_next = local_p[0];
-    //     if (local_cur.x == local_next.x && local_cur.y == local_next.y) {
-    //         local_next = local_p[1];
-    //     }
+        local_next = local_p[0];
+        for (j=1; j<sendcounts[rank]; j++) {
+            /* Check if segment turns left */
+            if (check_turn_left(local_cur, local_next, local_p[j])) {
+                local_next = local_p[j];
+            }
+        }
 
-    //     for (j=0; j<sendcounts[rank]; j++) {
-    //         /* Check if segment turns left */
-    //         if (check_turn_left(local_cur, local_next, local_p[j])) {
-    //             local_next = local_p[j];
-    //         }
-    //     }
+        reduce_point_t cur_and_next = {local_cur, local_next};
+        reduce_point_t final_cur_and_next;
 
-    //     reduce_point_t cur_and_next = {local_cur, local_next};
-    //     reduce_point_t final_cur_and_next;
+        MPI_Allreduce(&cur_and_next, &final_cur_and_next, 1, mpi_reduce_point_t, mpi_turn_reduce, MPI_COMM_WORLD);
 
-    //     MPI_Allreduce(&cur_and_next, &final_cur_and_next, 1, mpi_reduce_point_t, mpi_turn_reduce, MPI_COMM_WORLD);
-
-    //     local_cur = final_cur_and_next.next;
-    // } while (!(local_cur.x == local_end.x && local_cur.y == local_end.y));
+        local_cur = final_cur_and_next.next;
+    } while (!(local_cur.x == local_end.x && local_cur.y == local_end.y));
 
     free(local_p);
 
