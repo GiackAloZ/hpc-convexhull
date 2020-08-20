@@ -485,8 +485,9 @@ int main( int argc, char *argv[]  )
     points_t pset, hull;
     double tstart, elapsed;
 
-    int rank, n_procs;
+    int rank;
     MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     
     if (rank == 0){
         read_input(stdin, &pset);
