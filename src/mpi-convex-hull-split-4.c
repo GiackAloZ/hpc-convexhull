@@ -332,7 +332,7 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
     
     MPI_Bcast(&local_cur, 1, mpi_point_t, 0, MPI_COMM_WORLD);
     MPI_Bcast(&local_end, 1, mpi_point_t, 0, MPI_COMM_WORLD);
-    // MPI_Scatterv(p, sendcounts, displs, mpi_point_t, local_p, local_n + 1, mpi_point_t, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(p, sendcounts, displs, mpi_point_t, local_p, local_n + 1, mpi_point_t, 0, MPI_COMM_WORLD);
  
     /* Main loop of the Gift Wrapping algorithm. This is where most of
        the time is spent; therefore, this is the block of code that
@@ -415,7 +415,7 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 
     /* Calculate every partial hull */
     points_t partial_hulls[4];
-    for (j = 0; j < 4; j++) {
+    for (j = 0; j < 1; j++) {
         partial_convex_hull(&partial_sets[j], &partial_hulls[j], 0, partial_sets[j].n - 1, rank, n_procs);
     }
 
