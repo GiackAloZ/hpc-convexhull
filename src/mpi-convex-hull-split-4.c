@@ -338,41 +338,41 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
     /* Main loop of the Gift Wrapping algorithm. This is where most of
        the time is spent; therefore, this is the block of code that
        must be parallelized. */
-    do {
-        if (rank == 0) {
-            /* Add the current vertex to the hull */
-            assert(hull->n < n);
-            hull->p[hull->n] = local_cur;
-            hull->n++;
-        }
+    // do {
+    //     if (rank == 0) {
+    //         /* Add the current vertex to the hull */
+    //         assert(hull->n < n);
+    //         hull->p[hull->n] = local_cur;
+    //         hull->n++;
+    //     }
 
-        local_next = local_p[0];
-        if (local_cur.x == local_next.x && local_cur.y == local_next.y) {
-            local_next = local_p[1];
-        }
+    //     local_next = local_p[0];
+    //     if (local_cur.x == local_next.x && local_cur.y == local_next.y) {
+    //         local_next = local_p[1];
+    //     }
 
-        for (j=0; j<sendcounts[rank]; j++) {
-            /* Check if segment turns left */
-            if (check_turn_left(local_cur, local_next, local_p[j])) {
-                local_next = local_p[j];
-            }
-        }
+    //     for (j=0; j<sendcounts[rank]; j++) {
+    //         /* Check if segment turns left */
+    //         if (check_turn_left(local_cur, local_next, local_p[j])) {
+    //             local_next = local_p[j];
+    //         }
+    //     }
 
-        reduce_point_t cur_and_next = {local_cur, local_next};
-        reduce_point_t final_cur_and_next;
+    //     reduce_point_t cur_and_next = {local_cur, local_next};
+    //     reduce_point_t final_cur_and_next;
 
-        MPI_Allreduce(&cur_and_next, &final_cur_and_next, 1, mpi_reduce_point_t, mpi_turn_reduce, MPI_COMM_WORLD);
+    //     MPI_Allreduce(&cur_and_next, &final_cur_and_next, 1, mpi_reduce_point_t, mpi_turn_reduce, MPI_COMM_WORLD);
 
-        local_cur = final_cur_and_next.next;
-    } while (!(local_cur.x == local_end.x && local_cur.y == local_end.y));
+    //     local_cur = final_cur_and_next.next;
+    // } while (!(local_cur.x == local_end.x && local_cur.y == local_end.y));
 
     free(local_p);
 
-    if (rank == 0) {
-        /* Trim the excess space in the convex hull array */
-        hull->p = (point_t*)realloc(hull->p, (hull->n) * sizeof(*(hull->p)));
-        assert(hull->p); 
-    }
+    // if (rank == 0) {
+    //     /* Trim the excess space in the convex hull array */
+    //     hull->p = (point_t*)realloc(hull->p, (hull->n) * sizeof(*(hull->p)));
+    //     assert(hull->p); 
+    // }
 }
 
 void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
