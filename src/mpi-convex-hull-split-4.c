@@ -303,6 +303,8 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
         /* There can be at most n points in the convex hull. At the end of
         this function we trim the excess space. */
         hull->p = (point_t*)malloc(n * sizeof(*(hull->p))); assert(hull->p);
+
+        printf("Root proc = %d\n", n);
     }
 
     MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
