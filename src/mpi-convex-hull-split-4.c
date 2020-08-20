@@ -282,7 +282,7 @@ void divide_set(const points_t *pset, const int p1_index, const int p2_index, po
 void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, int endIndex, int rank, int n_procs)
 {
     int n, i, j;
-    point_t *p = pset->p;
+    point_t *p;
 
     MPI_Datatype mpi_point_t;
     MPI_Type_contiguous(2, MPI_DOUBLE, &mpi_point_t);
@@ -365,7 +365,7 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
     //     local_cur = final_cur_and_next.next;
     // } while (!(local_cur.x == local_end.x && local_cur.y == local_end.y));
 
-    // free(local_p);
+    free(local_p);
 
     // if (rank == 0) {
     //     /* Trim the excess space in the convex hull array */
@@ -415,7 +415,7 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 
     /* Calculate every partial hull */
     points_t partial_hulls[4];
-    for (j = 0; j < 2; j++) {
+    for (j = 0; j < 4; j++) {
         partial_convex_hull(&partial_sets[j], &partial_hulls[j], 0, partial_sets[j].n - 1, rank, n_procs);
     }
 
