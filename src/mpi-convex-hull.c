@@ -255,7 +255,7 @@ double cw_angle(const point_t p0, const point_t p1, const point_t p2)
 void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 {
     int n, i, j;
-    point_t *p = pset->p;
+    point_t *p;
     int leftmost;
 
     MPI_Datatype mpi_point_t;

@@ -282,7 +282,7 @@ void divide_set(const points_t *pset, const int p1_index, const int p2_index, po
 void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, int endIndex, int rank, int n_procs)
 {
     int n, i, j;
-    point_t *p = pset->p;
+    point_t *p;
 
     MPI_Datatype mpi_point_t;
     MPI_Type_contiguous(2, MPI_DOUBLE, &mpi_point_t);
@@ -420,23 +420,23 @@ void convex_hull(const points_t *pset, points_t *hull)
         partial_convex_hull(&partial_sets[j], &partial_hulls[j], 0, partial_sets[j].n - 1, rank, n_procs);
     }
 
-    // /* Merge hulls */
-    // if (rank == 0) {
-    //     for (j = 0; j < 4; j++) {
-    //         n_hull += partial_hulls[j].n;
-    //     }
-    //     hull->n = n_hull;
-    //     hull->p = (point_t*)malloc(n_hull * sizeof(point_t)); assert(hull->p);
+    /* Merge hulls */
+    if (rank == 0) {
+        for (j = 0; j < 4; j++) {
+            n_hull += partial_hulls[j].n;
+        }
+        hull->n = n_hull;
+        hull->p = (point_t*)malloc(n_hull * sizeof(point_t)); assert(hull->p);
 
-    //     next = 0;
-    //     for (j = 0; j < 4; j++) {
-    //         for (i = 0; i < partial_hulls[j].n; i++) {
-    //             hull->p[next++] = partial_hulls[j].p[i];
-    //         }
-    //         free_pointset(&partial_sets[j]);
-    //         free_pointset(&partial_hulls[j]);
-    //     }
-    // }
+        next = 0;
+        for (j = 0; j < 4; j++) {
+            for (i = 0; i < partial_hulls[j].n; i++) {
+                hull->p[next++] = partial_hulls[j].p[i];
+            }
+            free_pointset(&partial_sets[j]);
+            free_pointset(&partial_hulls[j]);
+        }
+    }
 }
 
 /**
