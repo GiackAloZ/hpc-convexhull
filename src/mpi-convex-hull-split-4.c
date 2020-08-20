@@ -82,6 +82,13 @@ enum {
     RIGHT
 };
 
+enum {
+    LEFTMOST = 0,
+    HIGHEST = 1,
+    RIGHTMOST = 2,
+    LOWEST = 3
+};
+
 /**
  * Read input from file f, and store the set of points into the
  * structure pset.
