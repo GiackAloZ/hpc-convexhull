@@ -314,17 +314,16 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
 
     int cnt = 0;
     for (i=0; i<n_procs; i++) {
-        int cntnow = n / n_procs + ((i < n%n_procs) ? 1 : 0);
+        int cntnow = local_n + ((i < n%n_procs) ? 1 : 0);
         sendcounts[i] = cntnow;
         displs[i] = cnt;
         cnt += cntnow;
 
+        /* Fix sendcount zero, just send the first point again */
         if (sendcounts[i] == 0) {
             sendcounts[i] = 1;
             displs[i] = 0;
         }
-
-        printf("Proc %d send %d displ %d\n", rank, sendcounts[i], displs[i]);
     }
 
     point_t local_cur, local_next, local_end;

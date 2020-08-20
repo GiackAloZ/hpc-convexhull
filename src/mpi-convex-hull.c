@@ -296,10 +296,16 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 
     int cnt = 0;
     for (i=0; i<n_procs; i++) {
-        int cntnow = n / n_procs + ((i < n%n_procs) ? 1 : 0);
+        int cntnow = local_n + ((i < n%n_procs) ? 1 : 0);
         sendcounts[i] = cntnow;
         displs[i] = cnt;
         cnt += cntnow;
+
+        /* Fix sendcount zero, just send the first point again */
+        if (sendcounts[i] == 0) {
+            sendcounts[i] = 1;
+            displs[i] = 0;
+        }
     }
 
     point_t local_cur, local_next;
@@ -326,11 +332,7 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
         }
 
         local_next = local_p[0];
-        if (local_cur.x == local_next.x && local_cur.y == local_next.y) {
-            local_next = local_p[1];
-        }
-
-        for (j=0; j<sendcounts[rank]; j++) {
+        for (j=1; j<sendcounts[rank]; j++) {
             /* Check if segment turns left */
             if (check_turn_left(local_cur, local_next, local_p[j])) {
                 local_next = local_p[j];
