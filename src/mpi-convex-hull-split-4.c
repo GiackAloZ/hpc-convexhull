@@ -415,28 +415,28 @@ void convex_hull(const points_t *pset, points_t *hull)
     }
 
     /* Calculate every partial hull */
-    points_t partial_hulls[4];
-    for (j = 0; j < 4; j++) {
-        partial_convex_hull(&partial_sets[j], &partial_hulls[j], 0, partial_sets[j].n - 1, rank, n_procs);
-    }
+    // points_t partial_hulls[4];
+    // for (j = 0; j < 4; j++) {
+    //     partial_convex_hull(&partial_sets[j], &partial_hulls[j], 0, partial_sets[j].n - 1, rank, n_procs);
+    // }
 
-    /* Merge hulls */
-    if (rank == 0) {
-        for (j = 0; j < 4; j++) {
-            n_hull += partial_hulls[j].n;
-        }
-        hull->n = n_hull;
-        hull->p = (point_t*)malloc(n_hull * sizeof(point_t)); assert(hull->p);
+    // /* Merge hulls */
+    // if (rank == 0) {
+    //     for (j = 0; j < 4; j++) {
+    //         n_hull += partial_hulls[j].n;
+    //     }
+    //     hull->n = n_hull;
+    //     hull->p = (point_t*)malloc(n_hull * sizeof(point_t)); assert(hull->p);
 
-        next = 0;
-        for (j = 0; j < 4; j++) {
-            for (i = 0; i < partial_hulls[j].n; i++) {
-                hull->p[next++] = partial_hulls[j].p[i];
-            }
-            free_pointset(&partial_sets[j]);
-            free_pointset(&partial_hulls[j]);
-        }
-    }
+    //     next = 0;
+    //     for (j = 0; j < 4; j++) {
+    //         for (i = 0; i < partial_hulls[j].n; i++) {
+    //             hull->p[next++] = partial_hulls[j].p[i];
+    //         }
+    //         free_pointset(&partial_sets[j]);
+    //         free_pointset(&partial_hulls[j]);
+    //     }
+    // }
 }
 
 /**
