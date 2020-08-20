@@ -196,6 +196,15 @@ int turn(const point_t p0, const point_t p1, const point_t p2)
     }
 }
 
+int check_turn_left(const point_t p0, const point_t p1, const point_t p2) {
+    int turning = turn(p0, p1, p2);
+    if (turning == LEFT ||
+        (turning == COLLINEAR && dist(p0, p2) > dist(p0, p1))) {
+        return 1;
+    }
+    return 0;
+}
+
 void turn_reduce(void *in, void *inout, int *len, MPI_Datatype *dptr) {
     int i;
 
@@ -204,9 +213,7 @@ void turn_reduce(void *in, void *inout, int *len, MPI_Datatype *dptr) {
 
     for (i=0; i<*len; i++) {
         reduce_point_t out = in_conv[i];
-        int turning = turn(out.cur, inout_conv[i].next, out.next);
-        if (turning == LEFT ||
-            (turning == COLLINEAR && dist(out.cur, out.next) > dist(out.cur, inout_conv[i].next))) {
+        if (check_turn_left(out.cur, inout_conv[i].next, out.next)) {
             inout_conv[i] = out;
         }
     }
@@ -303,7 +310,6 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
     }
     
     MPI_Bcast(&local_cur, 1, mpi_point_t, 0, MPI_COMM_WORLD);
-    //MPI_Scatter(p, local_n, mpi_point_t, local_p, local_n, mpi_point_t, 0, MPI_COMM_WORLD);
     MPI_Scatterv(p, sendcounts, displs, mpi_point_t, local_p, local_n + 1, mpi_point_t, 0, MPI_COMM_WORLD);
 
     point_t local_leftmost = local_cur;
@@ -326,9 +332,7 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 
         for (j=0; j<sendcounts[rank]; j++) {
             /* Check if segment turns left */
-            int turning = turn(local_cur, local_next, local_p[j]);
-            if (turning == LEFT ||
-                (turning == COLLINEAR && dist(local_cur, local_p[j]) > dist(local_cur, local_next))) {
+            if (check_turn_left(local_cur, local_next, local_p[j])) {
                 local_next = local_p[j];
             }
         }
