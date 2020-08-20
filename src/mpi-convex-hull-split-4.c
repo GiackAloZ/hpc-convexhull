@@ -413,6 +413,8 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
         divide_set(pset, cardinal[LOWEST], cardinal[LEFTMOST], &partial_sets[LOWEST]);
     }
 
+    printf("hey\n");
+
     /* Calculate every partial hull */
     points_t partial_hulls[4];
     for (j = 0; j < 4; j++) {
