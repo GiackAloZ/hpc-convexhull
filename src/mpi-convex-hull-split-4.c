@@ -282,7 +282,7 @@ void divide_set(const points_t *pset, const int p1_index, const int p2_index, po
 void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, int endIndex, int rank, int n_procs)
 {
     int n, i, j;
-    point_t *p;
+    point_t *p = pset->p;
 
     MPI_Datatype mpi_point_t;
     MPI_Type_contiguous(2, MPI_DOUBLE, &mpi_point_t);
@@ -335,50 +335,47 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
     /* Main loop of the Gift Wrapping algorithm. This is where most of
        the time is spent; therefore, this is the block of code that
        must be parallelized. */
-    do {
-        if (rank == 0) {
-            /* Add the current vertex to the hull */
-            assert(hull->n < n);
-            hull->p[hull->n] = local_cur;
-            hull->n++;
-        }
+    // do {
+    //     if (rank == 0) {
+    //         /* Add the current vertex to the hull */
+    //         assert(hull->n < n);
+    //         hull->p[hull->n] = local_cur;
+    //         hull->n++;
+    //     }
 
-        local_next = local_p[0];
-        if (local_cur.x == local_next.x && local_cur.y == local_next.y) {
-            local_next = local_p[1];
-        }
+    //     local_next = local_p[0];
+    //     if (local_cur.x == local_next.x && local_cur.y == local_next.y) {
+    //         local_next = local_p[1];
+    //     }
 
-        for (j=0; j<sendcounts[rank]; j++) {
-            /* Check if segment turns left */
-            if (check_turn_left(local_cur, local_next, local_p[j])) {
-                local_next = local_p[j];
-            }
-        }
+    //     for (j=0; j<sendcounts[rank]; j++) {
+    //         /* Check if segment turns left */
+    //         if (check_turn_left(local_cur, local_next, local_p[j])) {
+    //             local_next = local_p[j];
+    //         }
+    //     }
 
-        reduce_point_t cur_and_next = {local_cur, local_next};
-        reduce_point_t final_cur_and_next;
+    //     reduce_point_t cur_and_next = {local_cur, local_next};
+    //     reduce_point_t final_cur_and_next;
 
-        MPI_Allreduce(&cur_and_next, &final_cur_and_next, 1, mpi_reduce_point_t, mpi_turn_reduce, MPI_COMM_WORLD);
+    //     MPI_Allreduce(&cur_and_next, &final_cur_and_next, 1, mpi_reduce_point_t, mpi_turn_reduce, MPI_COMM_WORLD);
 
-        local_cur = final_cur_and_next.next;
-    } while (!(local_cur.x == local_end.x && local_cur.y == local_end.y));
+    //     local_cur = final_cur_and_next.next;
+    // } while (!(local_cur.x == local_end.x && local_cur.y == local_end.y));
 
     free(local_p);
 
-    if (rank == 0) {
-        /* Trim the excess space in the convex hull array */
-        hull->p = (point_t*)realloc(hull->p, (hull->n) * sizeof(*(hull->p)));
-        assert(hull->p); 
-    }
+    // if (rank == 0) {
+    //     /* Trim the excess space in the convex hull array */
+    //     hull->p = (point_t*)realloc(hull->p, (hull->n) * sizeof(*(hull->p)));
+    //     assert(hull->p); 
+    // }
 }
 
-void convex_hull(const points_t *pset, points_t *hull)
+void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 {
     int n, rank, n_procs, i, j, next, n_hull = 0;
     point_t *p;
-
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &n_procs);
 
     points_t partial_sets[4];
 
@@ -495,7 +492,7 @@ int main( int argc, char *argv[]  )
     }
 
     tstart = hpc_gettime();
-    convex_hull(&pset, &hull);
+    convex_hull(&pset, &hull, rank, n_procs);
     elapsed = hpc_gettime() - tstart;
 
     if (rank == 0) {
