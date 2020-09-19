@@ -5,5 +5,7 @@ src/*
 !src/*.in
 !src/Makefile
 
+env/*
+
 
 Relazione.odt

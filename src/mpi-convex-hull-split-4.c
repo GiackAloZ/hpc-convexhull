@@ -263,6 +263,11 @@ void divide_set(const points_t *pset, const int p1_index, const int p2_index, po
     res_set->p = (point_t*)malloc(n * sizeof(point_t)); assert(res_set->p);
     res_set->p[0] = p[p1_index];
 
+    if (p1_index == p2_index) {
+        res_set->p = (point_t*)realloc(res_set->p, res_set->n * sizeof(point_t)); assert(res_set->p);
+        return;
+    }
+
     for (i = 0; i < n; i++) {
         if (i == p1_index || i == p2_index) continue;
         if (turn(p[p1_index], p[p2_index], p[i]) == LEFT) {
@@ -368,11 +373,11 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
 
     free(local_p);
 
-    // if (rank == 0) {
-    //     /* Trim the excess space in the convex hull array */
-    //     hull->p = (point_t*)realloc(hull->p, (hull->n) * sizeof(*(hull->p)));
-    //     assert(hull->p); 
-    // }
+    if (rank == 0) {
+        /* Trim the excess space in the convex hull array */
+        hull->p = (point_t*)realloc(hull->p, (hull->n) * sizeof(*(hull->p)));
+        assert(hull->p); 
+    }
 }
 
 void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
@@ -417,7 +422,19 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
     /* Calculate every partial hull */
     points_t partial_hulls[4];
     for (j = 0; j < 4; j++) {
-        partial_convex_hull(&partial_sets[j], &partial_hulls[j], 0, partial_sets[j].n - 1, rank, n_procs);
+        int pn = 0;
+        if (rank == 0) {
+            pn = partial_sets[j].n;
+        }
+        MPI_Bcast(&pn, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+        /* Check partial set capacity. */
+        if (pn > 1) {
+            /* Compute the convex hull of the partial set. */
+            partial_convex_hull(&partial_sets[j], &partial_hulls[j], 0, partial_sets[j].n - 1, rank, n_procs);
+        } else {
+            partial_hulls[j].n = 0;
+        }
     }
 
     /* Merge hulls */
@@ -433,8 +450,13 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
             for (i = 0; i < partial_hulls[j].n; i++) {
                 hull->p[next++] = partial_hulls[j].p[i];
             }
-            free_pointset(&partial_sets[j]);
-            free_pointset(&partial_hulls[j]);
+
+            if (partial_sets[j].n > 1) {
+                free_pointset(&partial_sets[j]);
+            }
+            if (partial_hulls[j].n > 1) {
+                free_pointset(&partial_hulls[j]);
+            }
         }
     }
 }

@@ -212,6 +212,34 @@ double cw_angle(const point_t p0, const point_t p1, const point_t p2)
     return (result >= 0 ? result : 2*M_PI + result);
 }
 
+/** 
+ * Computes the squared euclidean distance between two points.
+ */
+long long int square_dist(const point_t a, const point_t b){
+    long long int x = a.x - b.x;
+    long long int y = a.y - b.y;
+    return x*x + y*y;
+}
+
+/**
+ * Checks if the point `tocheck` is the next point of the convex hull given the `prev` point and the current `next` point.
+ * This function checks 3 things:
+ * - if the line prev->next->tocheck turns left
+ * - if the points are not collinear
+ * - if `tocheck` is further from `prev` than `next`
+ * 
+ * If all conditions are true, than `tocheck` replaces `next` in the convex hull computation.
+ * This function is used to find the smallest convex hull set of points.
+ */
+int check_next_chpoint(const point_t prev, const point_t next, const point_t tocheck) {
+    int turning = turn(prev, next, tocheck);
+    if (turning == LEFT ||
+        (turning == COLLINEAR && square_dist(prev, tocheck) > square_dist(prev, next))) {
+        return 1;
+    }
+    return 0;
+}
+
 /**
  * Compute the convex hull of all points in pset using the "Gift
  * Wrapping" algorithm. The vertices are stored in the hull data
@@ -262,7 +290,7 @@ void convex_hull(const points_t *pset, points_t *hull)
             int index = omp_get_thread_num();
 
             /* Check if segment turns left */
-            if (LEFT == turn(p[cur], p[next_priv[index]], p[j])) {
+            if (check_next_chpoint(p[cur], p[next_priv[index]], p[j])) {
                 next_priv[index] = j;
             }
         }
@@ -270,7 +298,7 @@ void convex_hull(const points_t *pset, points_t *hull)
         /* Reduce all next_priv into one single next */
         next = next_priv[0];
         for (i = 1; i < n_threads; i++){
-            if (LEFT == turn(p[cur], p[next], p[next_priv[i]])){
+            if (check_next_chpoint(p[cur], p[next], p[next_priv[i]])){
                 next = next_priv[i];
             }
         }

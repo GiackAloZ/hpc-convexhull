@@ -8,8 +8,6 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-#define min(a,b) (((a) < (b)) ? (a) : (b))
-
 /* A single point */
 typedef struct {
     double x, y;
@@ -20,6 +18,12 @@ typedef struct {
     int n;      /* number of points     */
     point_t *p; /* array of points      */
 } points_t;
+
+typedef struct {
+    point_t *set;
+    int index;
+    int cur_index;
+} red_point_t;
 
 enum {
     LEFT = -1,
@@ -135,27 +139,44 @@ int turn(const point_t p0, const point_t p1, const point_t p2)
 }
 
 /** 
- * Compute the euclidean distance between two points. 
+ * Computes the squared euclidean distance between two points.
  */
-double dist(const point_t a, const point_t b){
-    return hypot(a.x - b.x, a.y - b.y);
+long long int square_dist(const point_t a, const point_t b){
+    long long int x = a.x - b.x;
+    long long int y = a.y - b.y;
+    return x*x + y*y;
 }
 
-/** 
- * Compute a partial hull with the Gift Wrapping algorithm,
- * considering two points as start and end of the partial hull. 
+/**
+ * Checks if the point `tocheck` is the next point of the convex hull given the `cur` point and the current `next` point.
+ * This function checks for 2 things:
+ * - the line cur->next->tocheck turns left
+ * - the points are collinear AND `tocheck` is further from `cur` than `next` is from `cur`
  * 
- * The inner loop of the Gift Wrapping algo is parallelized
- * with a REDUCTION on the points using the TURN function.
+ * If one of the two conditions is true, then `tocheck` replaces `next` in the convex hull computation.
+ * This function is used to find the smallest convex hull set of points.
  */
-void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, int endIndex, int n_threads){
-    const int n = pset->n;
-    const point_t *p = pset->p;
-    int i, j;
-    int cur, next;
+int check_next_chpoint(const point_t cur, const point_t next, const point_t tocheck) {
+    int turning = turn(cur, next, tocheck);
+    if (turning == LEFT ||
+        (turning == COLLINEAR && square_dist(cur, tocheck) > square_dist(cur, next))) {
+        return 1;
+    }
+    return 0;
+}
 
-    /* Array for partial computation of next */
-    int* next_priv = (int*)malloc(n_threads * sizeof(int));
+red_point_t check_next_chpoint_red(red_point_t p1, red_point_t p2) {
+    if (check_next_chpoint(p1.set[p1.cur_index], p1.set[p1.index], p2.set[p2.index]))
+        return p2;
+    return p1;
+}
+
+/* Compute a partial hull with the Gift Wrapping algorithm,
+considering two points as start and end of the partial hull. */
+void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, int endIndex){
+    const int n = pset->n;
+    point_t *p = pset->p;
+    int cur, next;
     
     hull->n = 0;
     /* There can be at most n points in the convex hull. At the end of
@@ -163,6 +184,8 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
     hull->p = (point_t*)malloc(n * sizeof(*(hull->p))); assert(hull->p);
 
     cur = startIndex;
+ 
+#pragma omp declare reduction (left_turn_red:red_point_t:omp_out = check_next_chpoint_red(omp_out, omp_in))
  
     /* Main loop of the Gift Wrapping algorithm. This is where most of
        the time is spent; therefore, this is the block of code that
@@ -174,50 +197,26 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
         hull->n++;
         
         /* Search for the next vertex */
-        /* Initialize next_priv for each thread as the next point in the set:
-        it will be actually any other point that is not cur */
-        for(i = 0; i < n_threads; i++)
-            next_priv[i] = (cur + 1) % n;   /* Modulo is added to prevent access out of memory */
+        /* Initialize reductionr result and next index */
+        next = (cur + 1) % n;
+        red_point_t res = {p, next, cur};
 
-        /* Parallelizing inner loop with a manual reduction */
-#pragma omp parallel for default(none) private(j) shared(next_priv) shared(cur) shared(p) num_threads(n_threads)
-        for (j=0; j<n; j++) {
-            int tid = omp_get_thread_num();
-            int turning = turn(p[cur], p[next_priv[tid]], p[j]);
-            /* Check if segment turns left */
-            if (turning == LEFT ||  /* If collinear, take the furthers point from cur */
-                (turning == COLLINEAR && dist(p[cur], p[j]) > dist(p[cur], p[next_priv[tid]]))){
-                /* Update private next point for the current thread */
-                next_priv[tid] = j;
-            }
-        }
-
-        /* Reduce all next_priv into one single next using a logarithmic tree reduction. */
-#pragma omp parallel default(none) shared(n_threads) shared(next_priv) shared(cur) shared(p) num_threads(n_threads)
+#pragma omp parallel reduction(left_turn_red:res) default(none) firstprivate(next) firstprivate(n) firstprivate(cur) shared(p)
         {
-            int tid = omp_get_thread_num();
-            int red_procs = (n_threads + 1) / 2;
-            int rem_red = n_threads;
-
-            while(rem_red > 1) {
-                int other_idx = tid + red_procs;    /* Other index of the reduction step pairing */
-                if (tid < red_procs && other_idx < rem_red) {   /* Check if this tid is still reducing and the other index has
-                                                                   yet to be reduced */
-                    int turning = turn(p[cur], p[next_priv[tid]], p[next_priv[other_idx]]);
-                    if (turning == LEFT ||
-                        (turning == COLLINEAR && dist(p[cur], p[next_priv[other_idx]]) > dist(p[cur], p[next_priv[tid]]))){
-                        next_priv[tid] = next_priv[other_idx];
-                    }
+#pragma omp for
+            for (int j=0; j<n; j++) {
+                /* Check if segment turns left */
+                if (check_next_chpoint(p[cur], p[next], p[j])) {
+                    next = j;
                 }
-#pragma omp barrier
-                red_procs = (red_procs + 1) / 2;
-                rem_red = (rem_red + 1) / 2;
             }
+
+            res.set = p;
+            res.index = next;
+            res.cur_index = cur;
         }
 
-        /* At the end of the reduction, the solution is stored in next_priv[0]. */
-        next = next_priv[0];
-
+        next = res.index;
         assert(cur != next);
         cur = next;
     } while (cur != endIndex);
@@ -225,10 +224,8 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
     /* Trim the excess space in the convex hull array */
     hull->p = (point_t*)realloc(hull->p, (hull->n) * sizeof(*(hull->p)));
     assert(hull->p);
-    free(next_priv);
 }
 
-/* Enumeration for indexes of partial sets. */
 enum {
     LEFTMOST = 0,
     HIGHEST = 1,
@@ -236,35 +233,21 @@ enum {
     LOWEST = 3
 };
 
-/** 
- * Divide a set of points in another set, considering points
- * that turn left according to the line p1--->p2.
- * 
- * So, every point p that is like the figure:
- * 
- *   p                     p2
- *    \                    /\
- *     \                  /  \
- *      p2      OR       p    \
- *     /                       \
- *    /                         \
- *  p1                           p1  
- * 
- * Will be placed in the res_set.
- * The points p1 and p2 are stored at the beginning and at the end of the res_set. 
- */
 void divide_set(const points_t *pset, const int p1_index, const int p2_index, points_t *res_set) {
     int n = pset->n;
     point_t *p = pset->p;
     int i;
 
-    /* Set up res_set. */
     res_set->n = 1;
     res_set->p = (point_t*)malloc(n * sizeof(point_t)); assert(res_set->p);
     res_set->p[0] = p[p1_index];
 
+    if (p1_index == p2_index) {
+        res_set->p = (point_t*)realloc(res_set->p, res_set->n * sizeof(point_t)); assert(res_set->p);
+        return;
+    }
+
     for (i = 0; i < n; i++) {
-        /* Ignore points used for line. */
         if (i == p1_index || i == p2_index) continue;
         if (turn(p[p1_index], p[p2_index], p[i]) == LEFT) {
             res_set->p[res_set->n++] = p[i];
@@ -272,7 +255,6 @@ void divide_set(const points_t *pset, const int p1_index, const int p2_index, po
     }
 
     res_set->p[res_set->n++] = p[p2_index];
-    /* Resize res_set. */
     res_set->p = (point_t*)realloc(res_set->p, res_set->n * sizeof(point_t)); assert(res_set->p);
 }
 
@@ -282,21 +264,17 @@ void divide_set(const points_t *pset, const int p1_index, const int p2_index, po
  * structure, that does not need to be initialized by the caller.
  * 
  * The algorithm divides the original set of points into four sets:
- *      - taking 4 "cardinal" points (highest, lowest, rightmos, leftmost) of the set, we divide the sets
- *        tracing lines from leftmost to highest, from highest to righmost (we take points above these lines),
+ *      - taking 4 points (highest, lowest, rightmos, leftmost) we divide the sets
+ *        tracing lines from leftmost to highest, from highest to righmost (we take points above these lines);
  *        from rightmost to lowest, from lowest to leftmost (we take points below these lines)
  *      - each hull is computed for every set
  *      - these 4 hulls are than concatenated into one final hull
- * 
- * The reduced sets allow the computation to be faster because the algorithm needs to iterate on
- * a smaller number of points.
- * Note that the 4 "cardinal" points are always part of the convex hull of pset.
  */
 void convex_hull(const points_t *pset, points_t *hull)
 {
     const int n = pset->n;
     const point_t *p = pset->p;
-    int i, j, n_threads;
+    int i, j;
     
     /* Identify the 4 "cardinal" points in the set. */
     int cardinal[] = {0, 0, 0, 0};
@@ -322,31 +300,27 @@ void convex_hull(const points_t *pset, points_t *hull)
     }
 
     /* Initialize final hull structure. */
+    points_t partial_hulls[4];
     hull->n = 0;
     hull->p = (point_t*)malloc(n * sizeof(point_t)); assert(hull->p);
 
-    /* Main loop that does the computation for each slice of the original set. */
-    points_t partial_hulls[4];
-    n_threads = min(omp_get_max_threads(), 4);
-
-    int n_threads_splits[4];
-    for(j = 0; j < 4; j++)
-        n_threads_splits[j] = omp_get_max_threads() / n_threads;
-    for(j = 0; j < omp_get_max_threads() % n_threads; j++)
-        n_threads_splits[j]++;
-
-#pragma omp parallel for default(none) private(j) \
-        shared(pset) shared(partial_hulls) shared(cardinal) shared(n_threads_splits) shared(stderr) \
-        num_threads(n_threads)
+    /* Main loop that computes hull for each slice of the original set. */
     for (j = 0; j < 4; j++) {
         points_t partial_set;
 
-        /* Divide the original set into partial one splitted
+        /* Divide the original set into partial splitted
            accordingly to the line of two cardinal points. */
         divide_set(pset, cardinal[j], cardinal[(j+1) % 4], &partial_set);
-        /* Compute the convex hull of the partial set. */
-        partial_convex_hull(&partial_set, &partial_hulls[j], 0, partial_set.n - 1, n_threads_splits[j]);
 
+        /* Check partial set capacity. */
+        if (partial_set.n > 1) {
+            /* Compute the convex hull of the partial set. */
+            partial_convex_hull(&partial_set, &partial_hulls[j], 0, partial_set.n - 1);
+        } else {
+            partial_hulls[j].n = 0;
+        }
+
+        /* Free partial set of points. */
         free_pointset(&partial_set);
     }
 
@@ -355,11 +329,16 @@ void convex_hull(const points_t *pset, points_t *hull)
         for (i = 0; i < partial_hulls[j].n; i++) {
             hull->p[hull->n++] = partial_hulls[j].p[i];
         }
-        free_pointset(&partial_hulls[j]);
+
+        /* Check partial hull capacity. */
+        if (partial_hulls[j].n > 0) {
+            /* Free partial hull. */
+            free_pointset(&partial_hulls[j]);
+        }
     }
 
     /* Resize the hull with its actual size. */
-    hull->p = (point_t*)realloc(hull->p, hull->n * sizeof(point_t)); assert(hull->p);
+    //hull->p = (point_t*)realloc(hull->p, hull->n * sizeof(point_t)); assert(hull->p);
 }
 
 /**

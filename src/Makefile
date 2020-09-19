@@ -33,8 +33,9 @@ EXE_OMP:=$(basename $(wildcard omp-*.c))
 EXE_MPI:=$(basename $(wildcard mpi-*.c))
 EXE_CUDA:=$(basename $(wildcard cuda-*.cu))
 EXE_SERIAL:=convex-hull
-DATAFILES:=ace.in box1k.in box10k.in box100k.in box1M.in circ1k.in circ10k.in circ100k.in gaus100k.in gaus1M.in
-IMAGES:=$(patsubst %.in, %.png, $(DATAFILES))
+
+FILES_DIR:=files
+
 EXE:=$(EXE_OMP) $(EXE_MPI) $(EXE_SERIAL) $(EXE_CUDA)
 CFLAGS+=-std=c99 -Wall -Wpedantic -O2 -D_XOPEN_SOURCE=600
 LDLIBS+=-lm
@@ -42,16 +43,21 @@ NVCC:=nvcc
 NVCFLAGS+=-Wno-deprecated-gpu-targets
 NVLDLIBS+=-lm
 
-.PHONY: clean
+.PHONY: all clean files images outputs
 
-ALL: $(EXE) datafiles
+all: $(EXE) files
 
-datafiles: $(DATAFILES)
+files:
+	$(MAKE) -s --directory $(FILES_DIR)
 
-images: $(IMAGES)
+outputs:
+	$(MAKE) outputs -s --directory $(FILES_DIR)
+
+images:
+	$(MAKE) images -s --directory $(FILES_DIR)
 
 % : %.cu
-	$(NVCC) $(NVCFLAGS) $< -o $@ $(NVLDLIBS)
+	$(NVCC) $(NVCFLAGS) $< -o bin/$@ $(NVLDLIBS)
 
 $(EXE_OMP): CFLAGS+=-fopenmp
 $(EXE_OMP): LDLIBS+=-lgomp
@@ -62,35 +68,9 @@ mpi: $(EXE_MPI)
 
 cuda: $(EXE_CUDA)
 
-box1k.in:
-	rbox 1000 D2 > $@
-
-box10k.in:
-	rbox 10000 D2 > $@
-
-box100k.in:
-	rbox 100000 D2 > $@
-
-box1M.in:
-	rbox 1000000 D2 > $@
-
-box10M.in:
-	rbox 10000000 D2 > $@
-
-circ1k.in:
-	rbox s 1000 D2 > $@
-
-circ10k.in:
-	rbox s 10000 D2 > $@
-
-circ100k.in:
-	rbox s 100000 D2 > $@
-
-%.hull: %.in convex-hull
-	./convex-hull < $< > $@
-
-%.png: %.in %.hull
-	gnuplot -c plot-hull.gp $+ $@
+# %.hull: %.in convex-hull
+# 	./convex-hull < $< > $@
 
 clean:
+	$(MAKE) clean -s --directory $(FILES_DIR)
 	\rm -f $(EXE) *.o *~ $(IMAGES) *.hull

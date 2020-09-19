@@ -19,6 +19,12 @@ typedef struct {
     point_t *p; /* array of points      */
 } points_t;
 
+typedef struct {
+    point_t *set;
+    int index;
+    int cur_index;
+} red_point_t;
+
 enum {
     LEFT = -1,
     COLLINEAR,
@@ -132,25 +138,45 @@ int turn(const point_t p0, const point_t p1, const point_t p2)
     }
 }
 
-/* Compute the euclidean distance between two points (squared). */
+/** 
+ * Computes the squared euclidean distance between two points.
+ */
 long long int square_dist(const point_t a, const point_t b){
     long long int x = a.x - b.x;
     long long int y = a.y - b.y;
     return x*x + y*y;
 }
 
+/**
+ * Checks if the point `tocheck` is the next point of the convex hull given the `cur` point and the current `next` point.
+ * This function checks for 2 things:
+ * - the line cur->next->tocheck turns left
+ * - the points are collinear AND `tocheck` is further from `cur` than `next` is from `cur`
+ * 
+ * If one of the two conditions is true, then `tocheck` replaces `next` in the convex hull computation.
+ * This function is used to find the smallest convex hull set of points.
+ */
+int check_next_chpoint(const point_t cur, const point_t next, const point_t tocheck) {
+    int turning = turn(cur, next, tocheck);
+    if (turning == LEFT ||
+        (turning == COLLINEAR && square_dist(cur, tocheck) > square_dist(cur, next))) {
+        return 1;
+    }
+    return 0;
+}
+
+red_point_t check_next_chpoint_red(red_point_t p1, red_point_t p2) {
+    if (check_next_chpoint(p1.set[p1.cur_index], p1.set[p1.index], p2.set[p2.index]))
+        return p2;
+    return p1;
+}
+
 /* Compute a partial hull with the Gift Wrapping algorithm,
 considering two points as start and end of the partial hull. */
 void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, int endIndex){
     const int n = pset->n;
-    const point_t *p = pset->p;
-    int i, j;
+    point_t *p = pset->p;
     int cur, next;
-    
-    /* Get number of threads to use */
-    int n_threads = omp_get_max_threads();
-    /* Array for partial computation of next */
-    int* next_priv = (int*)malloc(n_threads * sizeof(int));
     
     hull->n = 0;
     /* There can be at most n points in the convex hull. At the end of
@@ -159,60 +185,45 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
 
     cur = startIndex;
  
-   /* 
-        Main loop of the Gift Wrapping algorithm. This is where most of
-        the time is spent; therefore, this is the block of code that
-        must be parallelized. 
+#pragma omp declare reduction (left_turn_red:red_point_t:omp_out = check_next_chpoint_red(omp_out, omp_in))
+ 
+    /* Main loop of the Gift Wrapping algorithm. This is where most of
+       the time is spent; therefore, this is the block of code that
+       must be parallelized. */
+    do {
+        /* Add the current vertex to the hull */
+        assert(hull->n < n);
+        hull->p[hull->n] = p[cur];
+        hull->n++;
         
-        A batch of threads is created before the main loop and kept through the duration of it.
-    */
-#pragma omp parallel default(none) firstprivate(n) private(i) shared(n_threads) shared(endIndex) shared(hull) shared(cur) shared(p) shared(next_priv) shared(next)
-    {
-        int tid = omp_get_thread_num();
+        /* Search for the next vertex */
+        /* Initialize reductionr result and next index */
+        next = (cur + 1) % n;
+        red_point_t res = {p, next, cur};
 
-        do {
-#pragma omp single
-            {
-                /* Add the current vertex to the hull */
-                assert(hull->n < n);
-                hull->p[hull->n] = p[cur];
-                hull->n++;
-            }
-            
-            /* Search for the next vertex */
-            /* Initialize next_priv for each thread as the next point in the set */
-            next_priv[tid] = (cur + 1) % n;
-#pragma omp barrier
-
-            /* The actual parallel-heavy computation */
-#pragma omp for private(j)
-            for (j=0; j<n; j++) {
+#pragma omp parallel reduction(left_turn_red:res) default(none) firstprivate(next) firstprivate(n) firstprivate(cur) shared(p)
+        {
+#pragma omp for
+            for (int j=0; j<n; j++) {
                 /* Check if segment turns left */
-                if (LEFT == turn(p[cur], p[next_priv[tid]], p[j])) {
-                    next_priv[tid] = j;
+                if (check_next_chpoint(p[cur], p[next], p[j])) {
+                    next = j;
                 }
             }
 
-            /* Sequential reduction */
-#pragma omp single
-            {
-                next = next_priv[0];
-                for (i = 1; i < n_threads; i++){
-                    if (LEFT == turn(p[cur], p[next], p[next_priv[i]])){
-                        next = next_priv[i];
-                    }
-                }
+            res.set = p;
+            res.index = next;
+            res.cur_index = cur;
+        }
 
-                assert(cur != next);
-                cur = next;
-            }
-        } while (cur != endIndex);
-    }
+        next = res.index;
+        assert(cur != next);
+        cur = next;
+    } while (cur != endIndex);
     
     /* Trim the excess space in the convex hull array */
     hull->p = (point_t*)realloc(hull->p, (hull->n) * sizeof(*(hull->p)));
     assert(hull->p);
-    free(next_priv);
 }
 
 enum {
