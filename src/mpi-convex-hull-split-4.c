@@ -284,21 +284,10 @@ void divide_set(const points_t *pset, const int p1_index, const int p2_index, po
  * Wrapping" algorithm. The vertices are stored in the hull data
  * structure, that does not need to be initialized by the caller.
  */
-void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, int endIndex, int rank, int n_procs)
+void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, int endIndex, int rank, int n_procs, MPI_Datatype mpi_point_t, MPI_Datatype mpi_reduce_point_t, MPI_Op mpi_turn_reduce)
 {
     int n, i, j;
     point_t *p = pset->p;
-
-    MPI_Datatype mpi_point_t;
-    MPI_Type_contiguous(2, MPI_DOUBLE, &mpi_point_t);
-    MPI_Type_commit(&mpi_point_t);
-
-    MPI_Datatype mpi_reduce_point_t;
-    MPI_Type_contiguous(2, mpi_point_t, &mpi_reduce_point_t);
-    MPI_Type_commit(&mpi_reduce_point_t);
-
-    MPI_Op mpi_turn_reduce;
-    MPI_Op_create(turn_reduce, 1, &mpi_turn_reduce);
 
     if (rank == 0) {
         n = pset->n;
@@ -419,6 +408,18 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
         divide_set(pset, cardinal[LOWEST], cardinal[LEFTMOST], &partial_sets[LOWEST]);
     }
 
+    /* MPI datatype and reduction creation. */
+    MPI_Datatype mpi_point_t;
+    MPI_Type_contiguous(2, MPI_DOUBLE, &mpi_point_t);
+    MPI_Type_commit(&mpi_point_t);
+
+    MPI_Datatype mpi_reduce_point_t;
+    MPI_Type_contiguous(2, mpi_point_t, &mpi_reduce_point_t);
+    MPI_Type_commit(&mpi_reduce_point_t);
+
+    MPI_Op mpi_turn_reduce;
+    MPI_Op_create(turn_reduce, 1, &mpi_turn_reduce);
+
     /* Calculate every partial hull */
     points_t partial_hulls[4];
     for (j = 0; j < 4; j++) {
@@ -431,7 +432,8 @@ void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
         /* Check partial set capacity. */
         if (pn > 1) {
             /* Compute the convex hull of the partial set. */
-            partial_convex_hull(&partial_sets[j], &partial_hulls[j], 0, partial_sets[j].n - 1, rank, n_procs);
+            partial_convex_hull(&partial_sets[j], &partial_hulls[j], 0, partial_sets[j].n - 1, rank, n_procs,
+                mpi_point_t, mpi_reduce_point_t, mpi_turn_reduce);
         } else {
             partial_hulls[j].n = 0;
         }

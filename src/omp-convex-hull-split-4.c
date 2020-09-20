@@ -185,7 +185,7 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
 
     cur = startIndex;
  
-#pragma omp declare reduction (left_turn_red:red_point_t:omp_out = check_next_chpoint_red(omp_out, omp_in))
+#pragma omp declare reduction (left_turn_red:red_point_t:omp_out = check_next_chpoint_red(omp_out, omp_in)) initializer(omp_priv = omp_orig)
  
     /* Main loop of the Gift Wrapping algorithm. This is where most of
        the time is spent; therefore, this is the block of code that
@@ -201,19 +201,12 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
         next = (cur + 1) % n;
         red_point_t res = {p, next, cur};
 
-#pragma omp parallel reduction(left_turn_red:res) default(none) firstprivate(next) firstprivate(n) firstprivate(cur) shared(p)
-        {
-#pragma omp for
-            for (int j=0; j<n; j++) {
-                /* Check if segment turns left */
-                if (check_next_chpoint(p[cur], p[next], p[j])) {
-                    next = j;
-                }
+#pragma omp parallel for reduction(left_turn_red:res) default(none) firstprivate(next) firstprivate(n) firstprivate(cur) shared(p)
+        for (int j=0; j<n; j++) {
+            /* Check if segment turns left */
+            if (check_next_chpoint(p[cur], p[res.index], p[j])) {
+                res.index = j;
             }
-
-            res.set = p;
-            res.index = next;
-            res.cur_index = cur;
         }
 
         next = res.index;

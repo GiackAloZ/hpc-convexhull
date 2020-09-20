@@ -50,6 +50,7 @@
  * gnuplot -c plot-hull.gp ace.in ace.hull ace.png
  *
  ****************************************************************************/
+#include <mpi.h>
 #include "hpc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,17 +66,15 @@ typedef struct {
     double x, y;
 } point_t;
 
+typedef struct {
+    point_t cur, next;
+} reduce_point_t;
+
 /* An array of n points */
 typedef struct {
     int n;      /* number of points     */
     point_t *p; /* array of points      */
 } points_t;
-
-typedef struct {
-    point_t *set;
-    int index;
-    int cur_index;
-} red_point_t;
 
 enum {
     LEFT = -1,
@@ -151,6 +150,13 @@ void write_hull( FILE *f, const points_t *hull )
     fprintf(f, "%f %f\n", hull->p[0].x, hull->p[0].y);    
 }
 
+/** 
+ * Compute the euclidean distance between two points. 
+ */
+double dist(const point_t a, const point_t b){
+    return hypot(a.x - b.x, a.y - b.y);
+}
+
 /**
  * Return LEFT, RIGHT or COLLINEAR depending on the shape
  * of the vectors p0p1 and p1p2
@@ -190,6 +196,29 @@ int turn(const point_t p0, const point_t p1, const point_t p2)
     }
 }
 
+int check_turn_left(const point_t p0, const point_t p1, const point_t p2) {
+    int turning = turn(p0, p1, p2);
+    if (turning == LEFT ||
+        (turning == COLLINEAR && dist(p0, p2) > dist(p0, p1))) {
+        return 1;
+    }
+    return 0;
+}
+
+void turn_reduce(void *in, void *inout, int *len, MPI_Datatype *dptr) {
+    int i;
+
+    reduce_point_t *in_conv = (reduce_point_t*)in;
+    reduce_point_t *inout_conv = (reduce_point_t*)inout;
+
+    for (i=0; i<*len; i++) {
+        reduce_point_t out = in_conv[i];
+        if (check_turn_left(out.cur, inout_conv[i].next, out.next)) {
+            inout_conv[i] = out;
+        }
+    }
+}
+
 /**
  * Get the clockwise angle between the line p0p1 and the vector p1p2 
  *
@@ -218,98 +247,113 @@ double cw_angle(const point_t p0, const point_t p1, const point_t p2)
     return (result >= 0 ? result : 2*M_PI + result);
 }
 
-/** 
- * Computes the squared euclidean distance between two points.
- */
-long long int square_dist(const point_t a, const point_t b){
-    long long int x = a.x - b.x;
-    long long int y = a.y - b.y;
-    return x*x + y*y;
-}
-
-/**
- * Checks if the point `tocheck` is the next point of the convex hull given the `cur` point and the current `next` point.
- * This function checks for 2 things:
- * - the line cur->next->tocheck turns left
- * - the points are collinear AND `tocheck` is further from `cur` than `next` is from `cur`
- * 
- * If one of the two conditions is true, then `tocheck` replaces `next` in the convex hull computation.
- * This function is used to find the smallest convex hull set of points.
- */
-int check_next_chpoint(const point_t cur, const point_t next, const point_t tocheck) {
-    int turning = turn(cur, next, tocheck);
-    if (turning == LEFT ||
-        (turning == COLLINEAR && square_dist(cur, tocheck) > square_dist(cur, next))) {
-        return 1;
-    }
-    return 0;
-}
-
-red_point_t check_next_chpoint_red(red_point_t p1, red_point_t p2) {
-    if (check_next_chpoint(p1.set[p1.cur_index], p1.set[p1.index], p2.set[p2.index]))
-        return p2;
-    return p1;
-}
-
 /**
  * Compute the convex hull of all points in pset using the "Gift
  * Wrapping" algorithm. The vertices are stored in the hull data
  * structure, that does not need to be initialized by the caller.
  */
-void convex_hull(const points_t *pset, points_t *hull)
+void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 {
-    const int n = pset->n;
+    int n, i, j;
     point_t *p = pset->p;
-    int i;
-    int cur, next, leftmost;
-    
-    hull->n = 0;
-    /* There can be at most n points in the convex hull. At the end of
-       this function we trim the excess space. */
-    hull->p = (point_t*)malloc(n * sizeof(*(hull->p))); assert(hull->p);
-    
-    /* Identify the leftmost point p[leftmost] */
-    leftmost = 0;
-    for (i = 1; i<n; i++) {
-        if (p[i].x < p[leftmost].x) {
-            leftmost = i;
+    int leftmost;
+
+    MPI_Datatype mpi_point_t;
+    MPI_Type_contiguous(2, MPI_DOUBLE, &mpi_point_t);
+    MPI_Type_commit(&mpi_point_t);
+
+    MPI_Datatype mpi_reduce_point_t;
+    MPI_Type_contiguous(2, mpi_point_t, &mpi_reduce_point_t);
+    MPI_Type_commit(&mpi_reduce_point_t);
+
+    MPI_Op mpi_turn_reduce;
+    MPI_Op_create(turn_reduce, 1, &mpi_turn_reduce);
+
+    if (rank == 0) {
+        n = pset->n;
+        p = pset->p;
+
+        hull->n = 0;
+        /* There can be at most n points in the convex hull. At the end of
+        this function we trim the excess space. */
+        hull->p = (point_t*)malloc(n * sizeof(*(hull->p))); assert(hull->p);
+
+        /* Identify the leftmost point p[leftmost] */
+        leftmost = 0;
+        for (i = 1; i<n; i++) {
+            if (p[i].x < p[leftmost].x) {
+                leftmost = i;
+            }
         }
     }
-    cur = leftmost;
 
-#pragma omp declare reduction (left_turn_red:red_point_t:omp_out = check_next_chpoint_red(omp_out, omp_in)) initializer(omp_priv = omp_orig)
+    MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    int local_n = n / n_procs;
+
+    int *sendcounts = (int*)malloc(n_procs * sizeof(int));
+    int *displs = (int*)malloc(n_procs * sizeof(int));
+
+    int cnt = 0;
+    for (i=0; i<n_procs; i++) {
+        int cntnow = local_n + ((i < n%n_procs) ? 1 : 0);
+        sendcounts[i] = cntnow;
+        displs[i] = cnt;
+        cnt += cntnow;
+
+        /* Fix sendcount zero, just send the first point again */
+        if (sendcounts[i] == 0) {
+            sendcounts[i] = 1;
+            displs[i] = 0;
+        }
+    }
+
+    point_t local_cur, local_next;
+    point_t *local_p = (point_t*)malloc((local_n+1) * sizeof(point_t));
+
+    if (rank == 0) {
+        local_cur = p[leftmost];
+    }
+    
+    MPI_Bcast(&local_cur, 1, mpi_point_t, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(p, sendcounts, displs, mpi_point_t, local_p, local_n+1, mpi_point_t, 0, MPI_COMM_WORLD);
+
+    point_t local_leftmost = local_cur;
  
     /* Main loop of the Gift Wrapping algorithm. This is where most of
        the time is spent; therefore, this is the block of code that
        must be parallelized. */
     do {
-        /* Add the current vertex to the hull */
-        assert(hull->n < n);
-        hull->p[hull->n] = p[cur];
-        hull->n++;
-        
-        /* Search for the next vertex */
-        /* Initialize reductionr result and next index */
-        next = (cur + 1) % n;
-        red_point_t res = {p, next, cur};
+        if (rank == 0) {
+            /* Add the current vertex to the hull */
+            assert(hull->n < n);
+            hull->p[hull->n] = local_cur;
+            hull->n++;
+        }
 
-#pragma omp parallel for reduction(left_turn_red:res) default(none) firstprivate(next) firstprivate(n) firstprivate(cur) shared(p)
-        for (int j=0; j<n; j++) {
+        local_next = local_p[0];
+        for (j=1; j<sendcounts[rank]; j++) {
             /* Check if segment turns left */
-            if (check_next_chpoint(p[cur], p[res.index], p[j])) {
-                res.index = j;
+            if (check_turn_left(local_cur, local_next, local_p[j])) {
+                local_next = local_p[j];
             }
         }
 
-        next = res.index;
+        reduce_point_t cur_and_next = {local_cur, local_next};
+        reduce_point_t final_cur_and_next;
 
-        assert(cur != next);
-        cur = next;
-    } while (cur != leftmost);
-    
-    /* Trim the excess space in the convex hull array */
-    hull->p = (point_t*)realloc(hull->p, (hull->n) * sizeof(*(hull->p)));
-    assert(hull->p); 
+        MPI_Allreduce(&cur_and_next, &final_cur_and_next, 1, mpi_reduce_point_t, mpi_turn_reduce, MPI_COMM_WORLD);
+
+        local_cur = final_cur_and_next.next;
+    } while (!(local_cur.x == local_leftmost.x && local_cur.y == local_leftmost.y));
+
+    free(local_p);
+
+    if (rank == 0) {
+        /* Trim the excess space in the convex hull array */
+        hull->p = (point_t*)realloc(hull->p, (hull->n) * sizeof(*(hull->p)));
+        assert(hull->p); 
+    }
 }
 
 /**
@@ -353,23 +397,37 @@ double hull_facet_area( const points_t *hull )
     return length;
 }
 
-int main( void )
+int main( int argc, char *argv[]  )
 {
     points_t pset, hull;
     double tstart, elapsed;
+
+    int rank, n_procs;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &n_procs);
     
-    read_input(stdin, &pset);
+    if (rank == 0){
+        read_input(stdin, &pset);
+    }
+
     tstart = hpc_gettime();
-    convex_hull(&pset, &hull);
+    convex_hull(&pset, &hull, rank, n_procs);
     elapsed = hpc_gettime() - tstart;
-    fprintf(stderr, "\nConvex hull of %d points in 2-d:\n\n", pset.n);
-    fprintf(stderr, "OMP computation using %d threads\n", omp_get_max_threads());
-    fprintf(stderr, "  Number of vertices: %d\n", hull.n);
-    fprintf(stderr, "  Total facet area: %f\n", hull_facet_area(&hull));
-    fprintf(stderr, "  Total volume: %f\n\n", hull_volume(&hull));
-    fprintf(stderr, "Elapsed time: %f\n\n", elapsed);
-    write_hull(stdout, &hull);
-    free_pointset(&pset);
-    free_pointset(&hull);
+
+    if (rank == 0) {
+        fprintf(stderr, "\nConvex hull of %d points in 2-d:\n\n", pset.n);
+        fprintf(stderr, "MPI computation using %d processors\n", n_procs);
+        fprintf(stderr, "  Number of vertices: %d\n", hull.n);
+        fprintf(stderr, "  Total facet area: %f\n", hull_facet_area(&hull));
+        fprintf(stderr, "  Total volume: %f\n\n", hull_volume(&hull));
+        fprintf(stderr, "Elapsed time: %f\n\n", elapsed);
+        write_hull(stdout, &hull);
+        free_pointset(&pset);
+        free_pointset(&hull);
+    }
+
+    MPI_Finalize();
+
     return EXIT_SUCCESS;    
 }
