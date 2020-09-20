@@ -2,8 +2,12 @@ src/*
 !src/*.c
 !src/*.h
 !src/*.cu
-!src/*.in
 !src/Makefile
+!src/benchmarks
+!src/files
+
+circ*.in
+box*.in
 
 env/*
 
