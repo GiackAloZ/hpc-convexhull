@@ -82,13 +82,6 @@ enum {
     RIGHT
 };
 
-enum {
-    LEFTMOST = 0,
-    HIGHEST = 1,
-    RIGHTMOST = 2,
-    LOWEST = 3
-};
-
 /**
  * Read input from file f, and store the set of points into the
  * structure pset.
@@ -254,40 +247,27 @@ double cw_angle(const point_t p0, const point_t p1, const point_t p2)
     return (result >= 0 ? result : 2*M_PI + result);
 }
 
-void divide_set(const points_t *pset, const int p1_index, const int p2_index, points_t *res_set) {
-    int n = pset->n;
-    point_t *p = pset->p;
-    int i;
-
-    res_set->n = 1;
-    res_set->p = (point_t*)malloc(n * sizeof(point_t)); assert(res_set->p);
-    res_set->p[0] = p[p1_index];
-
-    if (p1_index == p2_index) {
-        res_set->p = (point_t*)realloc(res_set->p, res_set->n * sizeof(point_t)); assert(res_set->p);
-        return;
-    }
-
-    for (i = 0; i < n; i++) {
-        if (i == p1_index || i == p2_index) continue;
-        if (turn(p[p1_index], p[p2_index], p[i]) == LEFT) {
-            res_set->p[res_set->n++] = p[i];
-        }
-    }
-
-    res_set->p[res_set->n++] = p[p2_index];
-    res_set->p = (point_t*)realloc(res_set->p, res_set->n * sizeof(point_t)); assert(res_set->p);
-}
-
 /**
  * Compute the convex hull of all points in pset using the "Gift
  * Wrapping" algorithm. The vertices are stored in the hull data
  * structure, that does not need to be initialized by the caller.
  */
-void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, int endIndex, int rank, int n_procs, MPI_Datatype mpi_point_t, MPI_Datatype mpi_reduce_point_t, MPI_Op mpi_turn_reduce)
+void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
 {
     int n, i, j;
     point_t *p = pset->p;
+    int leftmost;
+
+    MPI_Datatype mpi_point_t;
+    MPI_Type_contiguous(2, MPI_DOUBLE, &mpi_point_t);
+    MPI_Type_commit(&mpi_point_t);
+
+    MPI_Datatype mpi_reduce_point_t;
+    MPI_Type_contiguous(2, mpi_point_t, &mpi_reduce_point_t);
+    MPI_Type_commit(&mpi_reduce_point_t);
+
+    MPI_Op mpi_turn_reduce;
+    MPI_Op_create(turn_reduce, 1, &mpi_turn_reduce);
 
     if (rank == 0) {
         n = pset->n;
@@ -297,6 +277,14 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
         /* There can be at most n points in the convex hull. At the end of
         this function we trim the excess space. */
         hull->p = (point_t*)malloc(n * sizeof(*(hull->p))); assert(hull->p);
+
+        /* Identify the leftmost point p[leftmost] */
+        leftmost = 0;
+        for (i = 1; i<n; i++) {
+            if (p[i].x < p[leftmost].x) {
+                leftmost = i;
+            }
+        }
     }
 
     MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -320,18 +308,17 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
         }
     }
 
-    point_t local_cur, local_next, local_end;
+    point_t local_cur, local_next;
     point_t *local_p = (point_t*)malloc((local_n+1) * sizeof(point_t));
 
     if (rank == 0) {
-        local_cur = p[startIndex];
-        local_end = p[endIndex];
+        local_cur = p[leftmost];
     }
     
     MPI_Bcast(&local_cur, 1, mpi_point_t, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&local_end, 1, mpi_point_t, 0, MPI_COMM_WORLD);
-
     MPI_Scatterv(p, sendcounts, displs, mpi_point_t, local_p, local_n+1, mpi_point_t, 0, MPI_COMM_WORLD);
+
+    point_t local_leftmost = local_cur;
  
     /* Main loop of the Gift Wrapping algorithm. This is where most of
        the time is spent; therefore, this is the block of code that
@@ -358,7 +345,7 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
         MPI_Allreduce(&cur_and_next, &final_cur_and_next, 1, mpi_reduce_point_t, mpi_turn_reduce, MPI_COMM_WORLD);
 
         local_cur = final_cur_and_next.next;
-    } while (!(local_cur.x == local_end.x && local_cur.y == local_end.y));
+    } while (!(local_cur.x == local_leftmost.x && local_cur.y == local_leftmost.y));
 
     free(local_p);
 
@@ -366,100 +353,6 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
         /* Trim the excess space in the convex hull array */
         hull->p = (point_t*)realloc(hull->p, (hull->n) * sizeof(*(hull->p)));
         assert(hull->p); 
-    }
-}
-
-void convex_hull(const points_t *pset, points_t *hull, int rank, int n_procs)
-{
-    int n, i, j, next, n_hull = 0;
-    point_t *p;
-
-    points_t partial_sets[4];
-
-    if (rank == 0) {
-        n = pset->n;
-        p = pset->p;
-
-        /* Identify the 4 cardinal points in the set. */
-        int cardinal[] = {0, 0, 0, 0};
-        for (i = 1; i < n; i++) {
-            /* Leftmost-down */
-            if (p[i].x < p[cardinal[LEFTMOST]].x || (p[i].x == p[cardinal[LEFTMOST]].x && p[i].y < p[cardinal[LEFTMOST]].y)) {
-                cardinal[LEFTMOST] = i;
-            }
-            /* Rightmost-up */
-            if (p[i].x > p[cardinal[RIGHTMOST]].x || (p[i].x == p[cardinal[RIGHTMOST]].x && p[i].y > p[cardinal[RIGHTMOST]].y)) {
-                cardinal[RIGHTMOST] = i;
-            } 
-            /* Highest-left */
-            if (p[i].y > p[cardinal[HIGHEST]].y || (p[i].y == p[cardinal[HIGHEST]].y && p[i].x < p[cardinal[HIGHEST]].x)) {
-                cardinal[HIGHEST] = i;
-            } 
-            /* Lowest-right */
-            if (p[i].y < p[cardinal[LOWEST]].y || (p[i].y == p[cardinal[LOWEST]].y && p[i].x > p[cardinal[LOWEST]].x)) {
-                cardinal[LOWEST] = i;
-            }
-        }
-
-        /* Divide the plane in 4 parts */
-        divide_set(pset, cardinal[LEFTMOST], cardinal[HIGHEST], &partial_sets[LEFTMOST]);
-        divide_set(pset, cardinal[HIGHEST], cardinal[RIGHTMOST], &partial_sets[HIGHEST]);
-        divide_set(pset, cardinal[RIGHTMOST], cardinal[LOWEST], &partial_sets[RIGHTMOST]);
-        divide_set(pset, cardinal[LOWEST], cardinal[LEFTMOST], &partial_sets[LOWEST]);
-    }
-
-    /* MPI datatype and reduction creation. */
-    MPI_Datatype mpi_point_t;
-    MPI_Type_contiguous(2, MPI_DOUBLE, &mpi_point_t);
-    MPI_Type_commit(&mpi_point_t);
-
-    MPI_Datatype mpi_reduce_point_t;
-    MPI_Type_contiguous(2, mpi_point_t, &mpi_reduce_point_t);
-    MPI_Type_commit(&mpi_reduce_point_t);
-
-    MPI_Op mpi_turn_reduce;
-    MPI_Op_create(turn_reduce, 1, &mpi_turn_reduce);
-
-    /* Calculate every partial hull */
-    points_t partial_hulls[4];
-    for (j = 0; j < 4; j++) {
-        int pn = 0;
-        if (rank == 0) {
-            pn = partial_sets[j].n;
-        }
-        MPI_Bcast(&pn, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-        /* Check partial set capacity. */
-        if (pn > 1) {
-            /* Compute the convex hull of the partial set. */
-            partial_convex_hull(&partial_sets[j], &partial_hulls[j], 0, partial_sets[j].n - 1, rank, n_procs,
-                mpi_point_t, mpi_reduce_point_t, mpi_turn_reduce);
-        } else {
-            partial_hulls[j].n = 0;
-        }
-    }
-
-    /* Merge hulls */
-    if (rank == 0) {
-        for (j = 0; j < 4; j++) {
-            n_hull += partial_hulls[j].n;
-        }
-        hull->n = n_hull;
-        hull->p = (point_t*)malloc(n_hull * sizeof(point_t)); assert(hull->p);
-
-        next = 0;
-        for (j = 0; j < 4; j++) {
-            for (i = 0; i < partial_hulls[j].n; i++) {
-                hull->p[next++] = partial_hulls[j].p[i];
-            }
-
-            if (partial_sets[j].n > 1) {
-                free_pointset(&partial_sets[j]);
-            }
-            if (partial_hulls[j].n > 1) {
-                free_pointset(&partial_hulls[j]);
-            }
-        }
     }
 }
 

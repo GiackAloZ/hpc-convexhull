@@ -8,6 +8,8 @@ src/*
 
 circ*.in
 box*.in
+*.hull
+*.png
 
 env/*
 

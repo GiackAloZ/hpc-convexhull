@@ -1,6 +1,7 @@
-INPUT_FILES:=$(addsuffix .in, $(INPUT_NAMES))
+GEN_INPUT_NAMES:=box1k box10k box100k box1M circ1k circ10k circ100k
+GEN_INPUT_FILES:=$(addsuffix .in, $(GEN_INPUT_NAMES))
 
-ALL: $(INPUT_FILES)
+ALL: $(GEN_INPUT_FILES)
 
 box1k.in:
 	rbox 1000 D2 > $@

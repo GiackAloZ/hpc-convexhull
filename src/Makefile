@@ -1,8 +1,8 @@
-## Makefile di esempio per il progetto di High Performance Computing
+## Makefile di esempio modificato per il progetto di High Performance Computing
 ## 2019/2020, corso di laurea in Ingegneria e Scienze Informatiche,
 ## Universita' di Bologna.
 
-## Ultima modifica: 2019-11-16, Moreno Marzolla <moreno.marzolla(at)unibo.it>
+## Ultima modifica: 2020-09-27, Giacomo Aloisi <giacomo.aloisi(at)studio.unibo.it>
 
 ## Questo e' un frammento del Makefile utilizzato negli esempi
 ## illustrati durante il corso. Questo file puo' essere modificato e
@@ -31,30 +31,32 @@
 
 EXE_OMP:=$(basename $(wildcard omp-*.c))
 EXE_MPI:=$(basename $(wildcard mpi-*.c))
-EXE_CUDA:=$(basename $(wildcard cuda-*.cu))
 EXE_SERIAL:=convex-hull
 
 FILES_DIR:=files
 
-EXE:=$(EXE_OMP) $(EXE_MPI) $(EXE_SERIAL) $(EXE_CUDA)
+EXE:=$(EXE_OMP) $(EXE_MPI) $(EXE_SERIAL)
 CFLAGS+=-std=c99 -Wall -Wpedantic -O2 -D_XOPEN_SOURCE=600
 LDLIBS+=-lm
 NVCC:=nvcc
 NVCFLAGS+=-Wno-deprecated-gpu-targets
 NVLDLIBS+=-lm
 
-.PHONY: all clean files images outputs
+export COMMAND_EXE:=
+export OUTPUT_EXE:=omp-convex-hull
 
-all: $(EXE) files
+.PHONY: clean inputs outputs images
 
-files:
-	$(MAKE) -s --directory $(FILES_DIR)
+all: $(EXE)
 
-outputs:
-	$(MAKE) outputs -s --directory $(FILES_DIR)
+inputs:
+	$(MAKE) inputs --directory $(FILES_DIR)
 
-images:
-	$(MAKE) images -s --directory $(FILES_DIR)
+outputs: $(OUTPUT_EXE) inputs
+	$(MAKE) outputs --directory $(FILES_DIR)
+
+images: outputs
+	$(MAKE) images --directory $(FILES_DIR)
 
 % : %.cu
 	$(NVCC) $(NVCFLAGS) $< -o bin/$@ $(NVLDLIBS)
@@ -66,11 +68,6 @@ openmp: $(EXE_OMP)
 $(EXE_MPI): CC=mpicc
 mpi: $(EXE_MPI)
 
-cuda: $(EXE_CUDA)
-
-# %.hull: %.in convex-hull
-# 	./convex-hull < $< > $@
-
 clean:
-	$(MAKE) clean -s --directory $(FILES_DIR)
-	\rm -f $(EXE) *.o *~ $(IMAGES) *.hull
+	$(MAKE) clean --directory $(FILES_DIR)
+	\rm -f $(EXE) *.o *~

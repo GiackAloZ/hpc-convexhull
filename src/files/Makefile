@@ -1,19 +1,20 @@
-export INPUT_NAMES:=ace box1k box10k box100k box1M circ1k circ10k circ100k gaus100k gaus1M
 export INPUT_FOLDER:=inputs
 export OUTPUT_FOLDER:=outputs
 export IMAGES_FOLDER:=images
 
-.PHONY: all clean $(INPUT_FOLDER)
+export INPUT_NAMES:=$(basename $(notdir $(wildcard $(INPUT_FOLDER)/*.in)))
 
-all: $(INPUT_FOLDER)
+.PHONY: inputs clean outputs images
 
-$(INPUT_FOLDER):
-	$(MAKE) -s --directory $@
+inputs:
+	$(MAKE) --directory $(INPUT_FOLDER)
 
 outputs:
-	$(MAKE) -s --directory $(OUTPUT_FOLDER)
+	$(MAKE) --directory $(OUTPUT_FOLDER)
 
 images:
-	$(MAKE) -s --directory $(IMAGES_FOLDER)
+	$(MAKE) --directory $(IMAGES_FOLDER)
 
 clean:
+	$(MAKE) clean --directory $(OUTPUT_FOLDER)
+	$(MAKE) clean --directory $(IMAGES_FOLDER)
