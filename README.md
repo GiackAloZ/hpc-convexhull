@@ -35,8 +35,5 @@ Per generare i file di input come presente nel Makefile originale, usare:
 path/src> make files
 ```
 
-Per generare gli inviluppi risultanti 
-
-
-
+TODO
 
