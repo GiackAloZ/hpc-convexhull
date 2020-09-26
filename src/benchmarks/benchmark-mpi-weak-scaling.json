@@ -1,0 +1,46 @@
+{
+  "mpi-convex-hull": {
+    "1": {
+      "time": 1.475524263280774,
+      "weak scaling efficiency": 1.0
+    },
+    "2": {
+      "time": 1.5155900194266037,
+      "weak scaling efficiency": 0.9735642517882324
+    },
+    "4": {
+      "time": 1.580611682678043,
+      "weak scaling efficiency": 0.9335147142407434
+    },
+    "9": {
+      "time": 1.7599016825974783,
+      "weak scaling efficiency": 0.838412894237941
+    },
+    "12": {
+      "time": 2.198134911696826,
+      "weak scaling efficiency": 0.6712619209262998
+    }
+  },
+  "mpi-convex-hull-no-split": {
+    "1": {
+      "time": 8.31846540078979,
+      "weak scaling efficiency": 1.0
+    },
+    "2": {
+      "time": 8.568355322013458,
+      "weak scaling efficiency": 0.97083571912784
+    },
+    "4": {
+      "time": 8.650130376748514,
+      "weak scaling efficiency": 0.9616578061239127
+    },
+    "9": {
+      "time": 8.828319297989847,
+      "weak scaling efficiency": 0.9422479092576379
+    },
+    "12": {
+      "time": 11.010815707598853,
+      "weak scaling efficiency": 0.7554813032652067
+    }
+  }
+}

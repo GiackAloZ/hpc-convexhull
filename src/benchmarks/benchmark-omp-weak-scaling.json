@@ -1,0 +1,46 @@
+{
+  "omp-convex-hull": {
+    "1": {
+      "time": 1.367353780457765,
+      "weak scaling efficiency": 1.0
+    },
+    "2": {
+      "time": 1.522847323970922,
+      "weak scaling efficiency": 0.8978928871820863
+    },
+    "4": {
+      "time": 1.7237228050693496,
+      "weak scaling efficiency": 0.7932561873849275
+    },
+    "9": {
+      "time": 2.4524918310786945,
+      "weak scaling efficiency": 0.5575365280039907
+    },
+    "12": {
+      "time": 3.7945137206486903,
+      "weak scaling efficiency": 0.3603502006112154
+    }
+  },
+  "omp-convex-hull-no-split": {
+    "1": {
+      "time": 5.9167074166374505,
+      "weak scaling efficiency": 1.0
+    },
+    "2": {
+      "time": 6.0962553625569145,
+      "weak scaling efficiency": 0.9705478305547625
+    },
+    "4": {
+      "time": 6.467680925880101,
+      "weak scaling efficiency": 0.9148112723004072
+    },
+    "9": {
+      "time": 7.157231240827809,
+      "weak scaling efficiency": 0.8266754583652548
+    },
+    "12": {
+      "time": 9.471243294801091,
+      "weak scaling efficiency": 0.6247022943529728
+    }
+  }
+}
