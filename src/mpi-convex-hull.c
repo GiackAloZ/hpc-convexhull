@@ -3,7 +3,7 @@
  * Giacomo Aloisi (giacomo.aloisi@studio.unibo.it)
  * Matr. 0000832933
  * 
- * Verisione MPI con splitting in 4 sottoinsiemi
+ * Versione MPI con splitting in 4 sottoinsiemi
  * 
 ******************************************************/
 
@@ -294,7 +294,7 @@ void partial_convex_hull(int n, const points_t *pset, points_t *hull, int startI
 
     int cnt = 0;
     for (i=0; i<nprocs; i++) {
-        /* Fix local count if not divisible by nprocs. */
+        /* Fix local count if n is not divisible by nprocs. */
         int cntnow = local_n + ((i < n%nprocs) ? 1 : 0);
         sendcounts[i] = cntnow;
         displs[i] = cnt;
@@ -341,11 +341,11 @@ void partial_convex_hull(int n, const points_t *pset, points_t *hull, int startI
             }
         }
 
-        /* Prepare reduction struct. */
+        /* Prepare reduction struct with local result. */
         reduce_point_t cur_and_next = {local_cur, local_next};
         reduce_point_t final_cur_and_next;
 
-        /* Reduce all remaining points. */
+        /* Reduce all partial results. */
         MPI_Allreduce(&cur_and_next, &final_cur_and_next, 1, mpi_reduce_point_t, mpi_turn_reduce, MPI_COMM_WORLD);
 
         /* Store reduction result. */
@@ -528,6 +528,7 @@ int main( int argc, char *argv[]  )
     int rank, nprocs;
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     
     if (rank == 0){
         read_input(stdin, &pset);

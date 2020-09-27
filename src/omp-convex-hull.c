@@ -3,7 +3,7 @@
  * Giacomo Aloisi (giacomo.aloisi@studio.unibo.it)
  * Matr. 0000832933
  * 
- * Verisione OpenMP con splitting in 4 sottoinsiemi
+ * Versione OpenMP con splitting in 4 sottoinsiemi
  * 
 ******************************************************/
 
@@ -289,7 +289,7 @@ void partial_convex_hull(const points_t *pset, points_t *hull, int startIndex, i
             }
         }
 
-        /* Extract result of reduction and assign to next. */
+        /* Extract reduction result and assign to next. */
         next = res.index;
         assert(cur != next);
         cur = next;

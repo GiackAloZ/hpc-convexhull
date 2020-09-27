@@ -1,55 +1,12 @@
-/****************************************************************************
- *
- * convex-hull.c
- *
- * Compute the convex hull of a set of points in 2D
- *
- * Copyright (C) 2019 Moreno Marzolla <moreno.marzolla(at)unibo.it>
- * Last updated on 2019-11-25
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- ****************************************************************************
- *
- * Questo programma calcola l'inviluppo convesso (convex hull) di un
- * insieme di punti 2D letti da standard input usando l'algoritmo
- * "gift wrapping". Le coordinate dei vertici dell'inviluppo sono
- * stampate su standard output.  Per una descrizione completa del
- * problema si veda la specifica del progetto sul sito del corso:
- *
- * http://moreno.marzolla.name/teaching/HPC/
- *
- * Per compilare:
- *
- * gcc -D_XOPEN_SOURCE=600 -std=c99 -Wall -Wpedantic -O2 convex-hull.c -o convex-hull -lm
- *
- * (il flag -D_XOPEN_SOURCE=600 e' superfluo perche' viene settato
- * nell'header "hpc.h", ma definirlo tramite la riga di comando fa si'
- * che il programma compili correttamente anche se non si include
- * "hpc.h", o per errore non lo si include come primo file).
- *
- * Per eseguire il programma si puo' usare la riga di comando:
- *
- * ./convex-hull < ace.in > ace.hull
+/*****************************************************
  * 
- * Per visualizzare graficamente i punti e l'inviluppo calcolato è
- * possibile usare lo script di gnuplot (http://www.gnuplot.info/)
- * incluso nella specifica del progetto:
- *
- * gnuplot -c plot-hull.gp ace.in ace.hull ace.png
- *
- ****************************************************************************/
+ * Giacomo Aloisi (giacomo.aloisi@studio.unibo.it)
+ * Matr. 0000832933
+ * 
+ * Versione OpenMP no split
+ * 
+******************************************************/
+
 #include "hpc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,18 +22,20 @@ typedef struct {
     double x, y;
 } point_t;
 
-/* An array of n points */
-typedef struct {
-    int n;      /* number of points     */
-    point_t *p; /* array of points      */
-} points_t;
-
+/* A point for the omp reduction */
 typedef struct {
     point_t *set;
     int index;
     int cur_index;
 } red_point_t;
 
+/* An array of n points */
+typedef struct {
+    int n;      /* number of points     */
+    point_t *p; /* array of points      */
+} points_t;
+
+/* Turn results */
 enum {
     LEFT = -1,
     COLLINEAR,
@@ -127,8 +86,11 @@ void read_input( FILE *f, points_t *pset )
  */
 void free_pointset( points_t *pset )
 {
+    if (pset->n > 0) {
+        free(pset->p);
+    }
+
     pset->n = 0;
-    free(pset->p);
     pset->p = NULL;
 }
 
@@ -149,6 +111,16 @@ void write_hull( FILE *f, const points_t *hull )
     }
     /* write again the coordinates of the first point */
     fprintf(f, "%f %f\n", hull->p[0].x, hull->p[0].y);    
+}
+
+/** 
+ * Computes the squared euclidean distance between two points.
+ * Used to check for the furthest of three collinear points.
+ */
+double square_dist(const point_t a, const point_t b){
+    const double x = a.x - b.x;
+    const double y = a.y - b.y;
+    return x*x + y*y;
 }
 
 /**
@@ -191,50 +163,13 @@ int turn(const point_t p0, const point_t p1, const point_t p2)
 }
 
 /**
- * Get the clockwise angle between the line p0p1 and the vector p1p2 
- *
- *         .
- *        . 
- *       .--+ (this angle) 
- *      .   |    
- *     .    V
- *    p1--------------p2
- *    /
- *   /
- *  /
- * p0
- *
- * The function is not used in this program, but it might be useful.
- */
-double cw_angle(const point_t p0, const point_t p1, const point_t p2)
-{
-    const double x1 = p2.x - p1.x;
-    const double y1 = p2.y - p1.y;    
-    const double x2 = p1.x - p0.x;
-    const double y2 = p1.y - p0.y;
-    const double dot = x1*x2 + y1*y2;
-    const double det = x1*y2 - y1*x2;
-    const double result = atan2(det, dot);
-    return (result >= 0 ? result : 2*M_PI + result);
-}
-
-/** 
- * Computes the squared euclidean distance between two points.
- */
-long long int square_dist(const point_t a, const point_t b){
-    long long int x = a.x - b.x;
-    long long int y = a.y - b.y;
-    return x*x + y*y;
-}
-
-/**
- * Checks if the point `tocheck` is the next point of the convex hull given the `cur` point and the current `next` point.
+ * Checks if the point `tocheck` is the next point of the convex hull given the `cur` point and the current `next` possible convex hull vertex.
  * This function checks for 2 things:
  * - the line cur->next->tocheck turns left
  * - the points are collinear AND `tocheck` is further from `cur` than `next` is from `cur`
  * 
- * If one of the two conditions is true, then `tocheck` replaces `next` in the convex hull computation.
- * This function is used to find the smallest convex hull set of points.
+ * If one of the two conditions is true, then `tocheck` replaces `next` has the next possible vertex in the convex hull computation.
+ * This function is used to find the minimal convex hull.
  */
 int check_next_chpoint(const point_t cur, const point_t next, const point_t tocheck) {
     int turning = turn(cur, next, tocheck);
@@ -245,6 +180,11 @@ int check_next_chpoint(const point_t cur, const point_t next, const point_t toch
     return 0;
 }
 
+/**
+ * User-defined reduction function for the omp reduction clause.
+ * Each structure has the same `set` and `cur_index` point.
+ * The function compares the points given with `check_next_chpoint`.
+ */
 red_point_t check_next_chpoint_red(red_point_t p1, red_point_t p2) {
     if (check_next_chpoint(p1.set[p1.cur_index], p1.set[p1.index], p2.set[p2.index]))
         return p2;
@@ -252,17 +192,18 @@ red_point_t check_next_chpoint_red(red_point_t p1, red_point_t p2) {
 }
 
 /**
- * Compute the convex hull of all points in pset using the "Gift
- * Wrapping" algorithm. The vertices are stored in the hull data
+ * Compute the convex hull of all points in pset using a parallelized
+ * version of the "Gift  Wrapping" algorithm.
+ * The vertices are stored in the hull data
  * structure, that does not need to be initialized by the caller.
  */
 void convex_hull(const points_t *pset, points_t *hull)
 {
-    const int n = pset->n;
+    int n = pset->n;
     point_t *p = pset->p;
-    int i;
-    int cur, next, leftmost;
+    int i, cur, next, leftmost;
     
+    /* Initalize the hull structure. */
     hull->n = 0;
     /* There can be at most n points in the convex hull. At the end of
        this function we trim the excess space. */
@@ -279,9 +220,7 @@ void convex_hull(const points_t *pset, points_t *hull)
 
 #pragma omp declare reduction (left_turn_red:red_point_t:omp_out = check_next_chpoint_red(omp_out, omp_in)) initializer(omp_priv = omp_orig)
  
-    /* Main loop of the Gift Wrapping algorithm. This is where most of
-       the time is spent; therefore, this is the block of code that
-       must be parallelized. */
+    /* Outer loop of the Gift Wrapping algorithm. */
     do {
         /* Add the current vertex to the hull */
         assert(hull->n < n);
@@ -289,23 +228,24 @@ void convex_hull(const points_t *pset, points_t *hull)
         hull->n++;
         
         /* Search for the next vertex */
-        /* Initialize reductionr result and next index */
+        /* Initialize reduction result and next index */
         next = (cur + 1) % n;
         red_point_t res = {p, next, cur};
 
-#pragma omp parallel for reduction(left_turn_red:res) default(none) firstprivate(next) firstprivate(n) firstprivate(cur) shared(p)
-        for (int j=0; j<n; j++) {
-            /* Check if segment turns left */
-            if (check_next_chpoint(p[cur], p[res.index], p[j])) {
-                res.index = j;
+        /* Inner loop. */
+#pragma omp parallel for reduction(left_turn_red:res) default(none) shared(n) shared(cur) shared(p) private(i)
+        for (i=0; i<n; i++) {
+            /* Check if point i is candidate for next vertex. */
+            if (check_next_chpoint(p[cur], p[res.index], p[i])) {
+                res.index = i;
             }
         }
 
+        /* Extract reduction result and assign to next. */
         next = res.index;
-
         assert(cur != next);
         cur = next;
-    } while (cur != leftmost);
+    } while (cur != leftmost); /* Stop computation when returned to the start. */
     
     /* Trim the excess space in the convex hull array */
     hull->p = (point_t*)realloc(hull->p, (hull->n) * sizeof(*(hull->p)));
